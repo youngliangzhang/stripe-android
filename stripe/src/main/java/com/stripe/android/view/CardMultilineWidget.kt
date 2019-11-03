@@ -28,6 +28,10 @@ import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_EXPI
 import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_POSTAL
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.util.*
+import android.telephony.TelephonyManager
+import android.text.InputType
+
 
 /**
  * A multiline card input widget using the support design library's [TextInputLayout]
@@ -287,6 +291,16 @@ class CardMultilineWidget @JvmOverloads constructor(
         updateBrandUi()
 
         isEnabled = true
+
+        val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        val countryISO = telephonyManager.networkCountryIso
+        if (countryISO.contains("us")) {
+            postalCodeEditText.filters = arrayOf(*postalCodeEditText.filters, InputFilter.LengthFilter(5))
+            postalCodeEditText.inputType = InputType.TYPE_CLASS_NUMBER
+        } else {
+            postalCodeEditText.filters = arrayOf(*postalCodeEditText.filters, InputFilter.LengthFilter(7))
+            postalCodeEditText.inputType = InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS
+        }
     }
 
     /**
