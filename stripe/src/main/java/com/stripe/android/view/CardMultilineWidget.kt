@@ -11,11 +11,8 @@ import android.view.View
 import android.view.View.OnFocusChangeListener
 import android.view.inputmethod.EditorInfo
 import android.widget.LinearLayout
-import androidx.annotation.ColorInt
-import androidx.annotation.DrawableRes
-import androidx.annotation.IdRes
+import androidx.annotation.*
 import androidx.annotation.IntRange
-import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import com.google.android.material.textfield.TextInputLayout
@@ -270,9 +267,16 @@ class CardMultilineWidget @JvmOverloads constructor(
         postalCodeEditText.setAfterTextChangedListener(
             object : StripeEditText.AfterTextChangedListener {
                 override fun onTextChanged(text: String) {
-                    if (isPostalCodeMaximalLength(true, text)) {
-                        cardInputListener?.onPostalCodeComplete()
+                    if (TextUtils.isDigitsOnly(text)) {
+                        if (isPostalCodeMaximalLength(true, text)) {
+                            cardInputListener?.onPostalCodeComplete()
+                        }
+                    } else {
+                        if (text.length >= 6) {
+                            cardInputListener?.onPostalCodeComplete()
+                        }
                     }
+
                     postalCodeEditText.shouldShowError = false
                 }
             })
@@ -327,8 +331,13 @@ class CardMultilineWidget @JvmOverloads constructor(
         cvcEditText.shouldShowError = !cvcIsValid
         val postalCodeIsValidOrGone: Boolean
         if (shouldShowPostalCode) {
-            postalCodeIsValidOrGone = isPostalCodeMaximalLength(true,
-                postalCodeEditText.text?.toString())
+            val postalCodeString = postalCodeEditText.text?.toString()
+            postalCodeIsValidOrGone =
+                    if (TextUtils.isDigitsOnly(postalCodeString)) {
+                        isPostalCodeMaximalLength(true, postalCodeString)
+                    } else {
+                        postalCodeString != null && postalCodeString.length >= 6
+                    }
             postalCodeEditText.shouldShowError = !postalCodeIsValidOrGone
         } else {
             postalCodeIsValidOrGone = true
