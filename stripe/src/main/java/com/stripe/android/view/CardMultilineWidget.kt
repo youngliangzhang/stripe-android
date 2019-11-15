@@ -1,6 +1,7 @@
 package com.stripe.android.view
 
 import android.content.Context
+import android.content.res.Resources
 import android.graphics.Rect
 import android.os.Build
 import android.text.InputFilter
@@ -28,9 +29,9 @@ import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_EXPI
 import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_POSTAL
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.util.*
 import android.telephony.TelephonyManager
 import android.text.InputType
+import androidx.core.os.ConfigurationCompat
 
 
 /**
@@ -293,8 +294,11 @@ class CardMultilineWidget @JvmOverloads constructor(
         isEnabled = true
 
         val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        val countryISO = telephonyManager.networkCountryIso
-        if (countryISO.contains("us")) {
+        val networkCountryISO = telephonyManager.networkCountryIso
+        val simCountryISO = telephonyManager.simCountryIso
+        val locale = ConfigurationCompat.getLocales(Resources.getSystem().configuration).get(0)
+        val localeCountry = locale.country
+        if (networkCountryISO.contains("us") && simCountryISO.contains("us") && !localeCountry.equals("ca", true)) {
             postalCodeEditText.filters = arrayOf(*postalCodeEditText.filters, InputFilter.LengthFilter(5))
             postalCodeEditText.inputType = InputType.TYPE_CLASS_NUMBER
         } else {
