@@ -21,7 +21,8 @@ internal open class AddPaymentMethodCardView private constructor(
     context: Context,
     attrs: AttributeSet?,
     defStyleAttr: Int,
-    shouldShowPostalCode: Boolean
+    shouldShowPostalCode: Boolean,
+    shouldUseUSPostalCode: Boolean
 ) : AddPaymentMethodView(context, attrs, defStyleAttr) {
     private val cardMultilineWidget: CardMultilineWidget
 
@@ -30,12 +31,13 @@ internal open class AddPaymentMethodCardView private constructor(
 
     @JvmOverloads
     constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0) :
-        this(context, attrs, defStyleAttr, false)
+        this(context, attrs, defStyleAttr, false, true)
 
     init {
         View.inflate(getContext(), R.layout.add_payment_method_card_layout, this)
         cardMultilineWidget = findViewById(R.id.add_source_card_entry_widget)
         cardMultilineWidget.setShouldShowPostalCode(shouldShowPostalCode)
+        cardMultilineWidget.setShouldUseUSPostalCode(shouldUseUSPostalCode)
         initEnterListeners()
     }
 
@@ -83,8 +85,8 @@ internal open class AddPaymentMethodCardView private constructor(
 
     companion object {
         @JvmStatic
-        fun create(context: Context, shouldShowPostalCode: Boolean): AddPaymentMethodCardView {
-            return AddPaymentMethodCardView(context, null, 0, shouldShowPostalCode)
+        fun create(context: Context, shouldShowPostalCode: Boolean, shouldUseUSPostalCode: Boolean): AddPaymentMethodCardView {
+            return AddPaymentMethodCardView(context, null, 0, shouldShowPostalCode, shouldUseUSPostalCode)
         }
     }
 }

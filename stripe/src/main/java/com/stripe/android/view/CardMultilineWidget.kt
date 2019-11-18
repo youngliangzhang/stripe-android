@@ -1,10 +1,11 @@
 package com.stripe.android.view
 
 import android.content.Context
-import android.content.res.Resources
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.os.Build
+import android.text.InputFilter
+import android.text.InputType
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.AttributeSet
@@ -29,10 +30,6 @@ import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_EXPI
 import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_POSTAL
 import java.math.BigDecimal
 import java.math.RoundingMode
-import android.telephony.TelephonyManager
-import android.text.InputFilter
-import android.text.InputType
-import androidx.core.os.ConfigurationCompat
 
 
 /**
@@ -66,6 +63,8 @@ class CardMultilineWidget @JvmOverloads constructor(
     private val tintColorInt: Int
 
     private var cardHintText: String = resources.getString(R.string.card_number_hint)
+
+    private var shouldUseUSPostalCode: Boolean = true
 
     /**
      * Gets a [PaymentMethodCreateParams.Card] object from the user input, if all fields are
@@ -260,7 +259,7 @@ class CardMultilineWidget @JvmOverloads constructor(
         postalCodeEditText.setAfterTextChangedListener(
             object : StripeEditText.AfterTextChangedListener {
                 override fun onTextChanged(text: String) {
-                    if (TextUtils.isDigitsOnly(text)) {
+                    if (shouldUseUSPostalCode) {
                         if (isPostalCodeMaximalLength(text)) {
                             cardInputListener?.onPostalCodeComplete()
                         }
@@ -280,19 +279,6 @@ class CardMultilineWidget @JvmOverloads constructor(
         updateBrandUi()
 
         isEnabled = true
-
-        val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        val networkCountryISO = telephonyManager.networkCountryIso
-        val simCountryISO = telephonyManager.simCountryIso
-        val locale = ConfigurationCompat.getLocales(Resources.getSystem().configuration).get(0)
-        val localeCountry = locale.country
-        if (networkCountryISO.contains("us") && simCountryISO.contains("us") && !localeCountry.equals("ca", true)) {
-            postalCodeEditText.filters = arrayOf(*postalCodeEditText.filters, InputFilter.LengthFilter(5))
-            postalCodeEditText.inputType = InputType.TYPE_CLASS_NUMBER
-        } else {
-            postalCodeEditText.filters = arrayOf(*postalCodeEditText.filters, InputFilter.LengthFilter(7))
-            postalCodeEditText.inputType = InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS
-        }
     }
 
     /**
@@ -339,7 +325,7 @@ class CardMultilineWidget @JvmOverloads constructor(
         if (shouldShowPostalCode) {
             val postalCodeString = postalCodeEditText.text?.toString()
             postalCodeIsValidOrGone =
-                    if (TextUtils.isDigitsOnly(postalCodeString)) {
+                    if (shouldUseUSPostalCode) {
                         isPostalCodeMaximalLength(postalCodeString)
                     } else {
                         postalCodeString != null && postalCodeString.length >= 6
@@ -383,6 +369,17 @@ class CardMultilineWidget @JvmOverloads constructor(
     fun setShouldShowPostalCode(shouldShowPostalCode: Boolean) {
         this.shouldShowPostalCode = shouldShowPostalCode
         adjustViewForPostalCodeAttribute()
+    }
+
+    fun setShouldUseUSPostalCode(shouldUseUSPostalCode: Boolean) {
+        this.shouldUseUSPostalCode = shouldUseUSPostalCode
+        if (shouldUseUSPostalCode) {
+            postalCodeEditText.filters = arrayOf(InputFilter.LengthFilter(5))
+            postalCodeEditText.inputType = InputType.TYPE_CLASS_NUMBER
+        } else {
+            postalCodeEditText.filters = arrayOf(InputFilter.LengthFilter(7))
+            postalCodeEditText.inputType = InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS
+        }
     }
 
     /**

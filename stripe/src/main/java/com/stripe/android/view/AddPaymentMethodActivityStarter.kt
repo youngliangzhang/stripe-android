@@ -30,6 +30,7 @@ class AddPaymentMethodActivityStarter constructor(
     data class Args internal constructor(
         internal val shouldAttachToCustomer: Boolean,
         internal val shouldRequirePostalCode: Boolean,
+        internal val shouldUseUSPostalCode: Boolean,
         internal val isPaymentSessionActive: Boolean,
         internal val shouldInitCustomerSessionTokens: Boolean,
         internal val paymentMethodType: PaymentMethod.Type,
@@ -40,6 +41,7 @@ class AddPaymentMethodActivityStarter constructor(
         class Builder : ObjectBuilder<Args> {
             private var shouldAttachToCustomer: Boolean = false
             private var shouldRequirePostalCode: Boolean = false
+            private var shouldUseUSPostalCode: Boolean = true
             private var isPaymentSessionActive = false
             private var shouldInitCustomerSessionTokens = true
             private var paymentMethodType: PaymentMethod.Type? = PaymentMethod.Type.Card
@@ -62,6 +64,11 @@ class AddPaymentMethodActivityStarter constructor(
              */
             fun setShouldRequirePostalCode(shouldRequirePostalCode: Boolean): Builder {
                 this.shouldRequirePostalCode = shouldRequirePostalCode
+                return this
+            }
+
+            fun setShouldUseUSPostalCode(shouldUseUSPostalCode: Boolean): Builder {
+                this.shouldUseUSPostalCode = shouldUseUSPostalCode
                 return this
             }
 
@@ -107,6 +114,7 @@ class AddPaymentMethodActivityStarter constructor(
                 return Args(
                     shouldAttachToCustomer = shouldAttachToCustomer,
                     shouldRequirePostalCode = shouldRequirePostalCode,
+                    shouldUseUSPostalCode = shouldUseUSPostalCode,
                     isPaymentSessionActive = isPaymentSessionActive,
                     shouldInitCustomerSessionTokens = shouldInitCustomerSessionTokens,
                     paymentMethodType = paymentMethodType ?: PaymentMethod.Type.Card,
