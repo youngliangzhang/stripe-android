@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
-import android.text.InputFilter
 import android.text.Layout
 import android.text.TextWatcher
 import android.util.AttributeSet
@@ -45,8 +44,9 @@ class CardInputWidget @JvmOverloads constructor(
 ) : LinearLayout(context, attrs, defStyleAttr), CardWidget {
     private val cardIconImageView: ImageView
     private val frameLayout: FrameLayout
+
     private val cardNumberEditText: CardNumberEditText
-    private val cvcNumberEditText: StripeEditText
+    private val cvcNumberEditText: CvcEditText
     private val expiryDateEditText: ExpiryDateEditText
 
     private var cardInputListener: CardInputListener? = null
@@ -144,7 +144,7 @@ class CardInputWidget @JvmOverloads constructor(
         cardIconImageView = findViewById(R.id.iv_card_icon)
         cardNumberEditText = findViewById(R.id.et_card_number)
         expiryDateEditText = findViewById(R.id.et_expiry_date)
-        cvcNumberEditText = findViewById(R.id.et_cvc_number)
+        cvcNumberEditText = findViewById(R.id.et_cvc)
         frameLayout = findViewById(R.id.frame_container)
 
         initView(attrs)
@@ -267,12 +267,10 @@ class CardInputWidget @JvmOverloads constructor(
             return super.onInterceptTouchEvent(ev)
         }
 
-        val focusEditText = getFocusRequestOnTouch(ev.x.toInt())
-        if (focusEditText != null) {
-            focusEditText.requestFocus()
-            return true
-        }
-        return super.onInterceptTouchEvent(ev)
+        return getFocusRequestOnTouch(ev.x.toInt())?.let {
+            it.requestFocus()
+            true
+        } ?: super.onInterceptTouchEvent(ev)
     }
 
     override fun onSaveInstanceState(): Parcelable {
@@ -460,11 +458,10 @@ class CardInputWidget @JvmOverloads constructor(
                     info: AccessibilityNodeInfoCompat
                 ) {
                     super.onInitializeAccessibilityNodeInfo(host, info)
-                    val accLabel = resources.getString(
+                    info.text = resources.getString(
                         R.string.acc_label_cvc_node,
                         cvcNumberEditText.text
                     )
-                    info.text = accLabel
                 }
             })
 
@@ -509,11 +506,8 @@ class CardInputWidget @JvmOverloads constructor(
             }
         }
 
-        expiryDateEditText.setDeleteEmptyListener(
-            BackUpFieldDeleteListener(cardNumberEditText))
-
-        cvcNumberEditText.setDeleteEmptyListener(
-            BackUpFieldDeleteListener(expiryDateEditText))
+        expiryDateEditText.setDeleteEmptyListener(BackUpFieldDeleteListener(cardNumberEditText))
+        cvcNumberEditText.setDeleteEmptyListener(BackUpFieldDeleteListener(expiryDateEditText))
 
         cvcNumberEditText.onFocusChangeListener = OnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
@@ -540,33 +534,21 @@ class CardInputWidget @JvmOverloads constructor(
             }
         )
 
-        cardNumberEditText.setCardNumberCompleteListener(
-            object : CardNumberEditText.CardNumberCompleteListener {
-                override fun onCardNumberComplete() {
-                    scrollRight()
-                    cardInputListener?.onCardComplete()
-                }
-            }
-        )
+        cardNumberEditText.completionCallback = {
+            scrollRight()
+            cardInputListener?.onCardComplete()
+        }
 
-        cardNumberEditText.setCardBrandChangeListener(
-            object : CardNumberEditText.CardBrandChangeListener {
-                override fun onCardBrandChanged(brand: String) {
-                    isAmEx = CardBrand.AMERICAN_EXPRESS == brand
-                    updateIcon(brand)
-                    updateCvc(brand)
-                }
-            }
-        )
+        cardNumberEditText.brandChangeCallback = { brand ->
+            isAmEx = CardBrand.AMERICAN_EXPRESS == brand
+            updateIcon(brand)
+            cvcNumberEditText.updateBrand(brand)
+        }
 
-        expiryDateEditText.setExpiryDateEditListener(
-            object : ExpiryDateEditText.ExpiryDateEditListener {
-                override fun onExpiryDateComplete() {
-                    cvcNumberEditText.requestFocus()
-                    cardInputListener?.onExpirationComplete()
-                }
-            }
-        )
+        expiryDateEditText.completionCallback = {
+            cvcNumberEditText.requestFocus()
+            cardInputListener?.onExpirationComplete()
+        }
 
         cardNumberEditText.requestFocus()
     }
@@ -627,10 +609,11 @@ class CardInputWidget @JvmOverloads constructor(
         slideDateLeftAnimation.duration = ANIMATION_LENGTH
         slideCvcLeftAnimation.duration = ANIMATION_LENGTH
 
-        val animationSet = AnimationSet(true)
-        animationSet.addAnimation(slideCardLeftAnimation)
-        animationSet.addAnimation(slideDateLeftAnimation)
-        animationSet.addAnimation(slideCvcLeftAnimation)
+        val animationSet = AnimationSet(true).apply {
+            addAnimation(slideCardLeftAnimation)
+            addAnimation(slideDateLeftAnimation)
+            addAnimation(slideCvcLeftAnimation)
+        }
         frameLayout.startAnimation(animationSet)
         cardNumberIsViewed = true
     }
@@ -642,7 +625,7 @@ class CardInputWidget @JvmOverloads constructor(
 
         val dateStartMargin = placementParameters.cardWidth + placementParameters.cardDateSeparation
 
-        updateSpaceSizes(false)
+        updateSpaceSizes(isCardViewed = false)
 
         val slideCardRightAnimation = object : Animation() {
             override fun applyTransformation(interpolatedTime: Float, t: Transformation) {
@@ -693,10 +676,11 @@ class CardInputWidget @JvmOverloads constructor(
             }
         })
 
-        val animationSet = AnimationSet(true)
-        animationSet.addAnimation(slideCardRightAnimation)
-        animationSet.addAnimation(slideDateRightAnimation)
-        animationSet.addAnimation(slideCvcRightAnimation)
+        val animationSet = AnimationSet(true).apply {
+            addAnimation(slideCardRightAnimation)
+            addAnimation(slideDateRightAnimation)
+            addAnimation(slideCvcRightAnimation)
+        }
 
         frameLayout.startAnimation(animationSet)
         cardNumberIsViewed = false
@@ -724,10 +708,11 @@ class CardInputWidget @JvmOverloads constructor(
             }
             setLayoutValues(placementParameters.cardWidth, cardLeftMargin, cardNumberEditText)
 
-            val dateMargin = if (cardNumberIsViewed)
+            val dateMargin = if (cardNumberIsViewed) {
                 placementParameters.cardWidth + placementParameters.cardDateSeparation
-            else
+            } else {
                 placementParameters.peekCardWidth + placementParameters.cardDateSeparation
+            }
             setLayoutValues(placementParameters.dateWidth, dateMargin, expiryDateEditText)
 
             val cvcMargin = if (cardNumberIsViewed) {
@@ -779,16 +764,6 @@ class CardInputWidget @JvmOverloads constructor(
         }
     }
 
-    private fun updateCvc(@Card.CardBrand brand: String) {
-        if (CardBrand.AMERICAN_EXPRESS == brand) {
-            cvcNumberEditText.filters = arrayOf<InputFilter>(InputFilter.LengthFilter(Card.CVC_LENGTH_AMERICAN_EXPRESS))
-            cvcNumberEditText.setHint(R.string.cvc_amex_hint)
-        } else {
-            cvcNumberEditText.filters = arrayOf<InputFilter>(InputFilter.LengthFilter(Card.CVC_LENGTH_COMMON))
-            cvcNumberEditText.setHint(R.string.cvc_number_hint)
-        }
-    }
-
     private fun updateIcon(@Card.CardBrand brand: String) {
         if (CardBrand.UNKNOWN == brand) {
             val icon = ContextCompat.getDrawable(context, R.drawable.ic_unknown)
@@ -812,21 +787,20 @@ class CardInputWidget @JvmOverloads constructor(
     }
 
     private fun updateIconForCvcEntry(isAmEx: Boolean) {
-        if (isAmEx) {
-            cardIconImageView.setImageResource(R.drawable.ic_cvc_amex)
+        cardIconImageView.setImageResource(if (isAmEx) {
+            R.drawable.ic_cvc_amex
         } else {
-            cardIconImageView.setImageResource(R.drawable.ic_cvc)
-        }
+            R.drawable.ic_cvc
+        })
         applyTint(true)
     }
 
     /**
      * Interface useful for testing calculations without generating real views.
      */
-    @VisibleForTesting
     internal interface DimensionOverrideSettings {
-
         val frameWidth: Int
+
         fun getPixelWidth(text: String, editText: EditText): Int
     }
 
@@ -834,32 +808,38 @@ class CardInputWidget @JvmOverloads constructor(
      * A data-dump class.
      */
     internal class PlacementParameters {
-        var cardWidth: Int = 0
-        var hiddenCardWidth: Int = 0
-        var peekCardWidth: Int = 0
-        var cardDateSeparation: Int = 0
-        var dateWidth: Int = 0
-        var dateCvcSeparation: Int = 0
-        var cvcWidth: Int = 0
+        internal var cardWidth: Int = 0
+        internal var hiddenCardWidth: Int = 0
+        internal var peekCardWidth: Int = 0
+        internal var cardDateSeparation: Int = 0
+        internal var dateWidth: Int = 0
+        internal var dateCvcSeparation: Int = 0
+        internal var cvcWidth: Int = 0
 
-        var cardTouchBufferLimit: Int = 0
-        var dateStartPosition: Int = 0
-        var dateRightTouchBufferLimit: Int = 0
-        var cvcStartPosition: Int = 0
+        internal var cardTouchBufferLimit: Int = 0
+        internal var dateStartPosition: Int = 0
+        internal var dateRightTouchBufferLimit: Int = 0
+        internal var cvcStartPosition: Int = 0
 
         override fun toString(): String {
-            val touchBufferData = "Touch Buffer Data:\n" +
-                "CardTouchBufferLimit = $cardTouchBufferLimit\n" +
-                "DateStartPosition = $dateStartPosition\n" +
-                "DateRightTouchBufferLimit = $dateRightTouchBufferLimit\n" +
+            val touchBufferData = """
+                Touch Buffer Data:
+                "CardTouchBufferLimit = $cardTouchBufferLimit
+                "DateStartPosition = $dateStartPosition
+                "DateRightTouchBufferLimit = $dateRightTouchBufferLimit
                 "CvcStartPosition = $cvcStartPosition"
-            val elementSizeData = "CardWidth = $cardWidth\n" +
-                "HiddenCardWidth = $hiddenCardWidth\n" +
-                "PeekCardWidth = $peekCardWidth\n" +
-                "CardDateSeparation = $cardDateSeparation\n" +
-                "DateWidth = $dateWidth\n" +
-                "DateCvcSeparation = $dateCvcSeparation\n" +
-                "CvcWidth = $cvcWidth\n"
+                """
+
+            val elementSizeData = """
+                CardWidth = $cardWidth
+                HiddenCardWidth = $hiddenCardWidth
+                PeekCardWidth = $peekCardWidth
+                CardDateSeparation = $cardDateSeparation
+                DateWidth = $dateWidth
+                DateCvcSeparation = $dateCvcSeparation
+                CvcWidth = $cvcWidth
+                """
+
             return elementSizeData + touchBufferData
         }
     }
@@ -877,7 +857,7 @@ class CardInputWidget @JvmOverloads constructor(
         }
     }
 
-    companion object {
+    internal companion object {
         internal const val LOGGING_TOKEN = "CardInputView"
 
         private const val PEEK_TEXT_COMMON = "4242"
@@ -920,9 +900,7 @@ class CardInputWidget @JvmOverloads constructor(
             cvcHasFocus: Boolean,
             cvcText: String?
         ): Boolean {
-            return if (!cvcHasFocus) {
-                true
-            } else ViewUtils.isCvcMaximalLength(brand, cvcText)
+            return !cvcHasFocus || ViewUtils.isCvcMaximalLength(brand, cvcText)
         }
     }
 }

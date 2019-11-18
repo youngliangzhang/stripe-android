@@ -20,11 +20,11 @@ import com.stripe.android.CustomerSession.ACTION_API_EXCEPTION
 import com.stripe.android.CustomerSession.EXTRA_EXCEPTION
 import com.stripe.android.CustomerSessionTestHelper
 import com.stripe.android.PaymentConfiguration
-import com.stripe.android.PaymentController
 import com.stripe.android.PaymentSession.Companion.TOKEN_PAYMENT_SESSION
 import com.stripe.android.R
 import com.stripe.android.Stripe
 import com.stripe.android.StripeNetworkUtils
+import com.stripe.android.StripePaymentController
 import com.stripe.android.StripeRepository
 import com.stripe.android.exception.APIConnectionException
 import com.stripe.android.exception.APIException
@@ -45,6 +45,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.MainScope
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
@@ -327,13 +328,13 @@ class AddPaymentMethodActivityTest :
         return Stripe(
             stripeRepository,
             StripeNetworkUtils(context),
-            PaymentController.create(context, stripeRepository),
+            StripePaymentController.create(context, stripeRepository),
             ApiKeyFixtures.FAKE_PUBLISHABLE_KEY,
-            null
+            workScope = MainScope()
         )
     }
 
-    companion object {
+    private companion object {
         private fun createFakeRepository(paymentMethod: PaymentMethod): StripeRepository {
             return object : AbsFakeStripeRepository() {
                 override fun createPaymentMethod(

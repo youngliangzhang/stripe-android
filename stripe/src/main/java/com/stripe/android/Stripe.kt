@@ -3,10 +3,8 @@ package com.stripe.android
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.os.AsyncTask
 import androidx.annotation.Size
 import androidx.annotation.UiThread
-import androidx.annotation.VisibleForTesting
 import androidx.annotation.WorkerThread
 import androidx.fragment.app.Fragment
 import com.stripe.android.exception.APIConnectionException
@@ -30,7 +28,8 @@ import com.stripe.android.model.Source
 import com.stripe.android.model.SourceParams
 import com.stripe.android.model.Token
 import com.stripe.android.view.AuthActivityStarter
-import java.util.concurrent.Executor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 
 /**
  * Entry-point to the Stripe SDK.
@@ -49,8 +48,8 @@ class Stripe internal constructor(
     private val stripeNetworkUtils: StripeNetworkUtils,
     private val paymentController: PaymentController,
     publishableKey: String,
-    private val stripeAccountId: String?,
-    private val tokenCreator: TokenCreator
+    private val stripeAccountId: String? = null,
+    private val workScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) {
     private val publishableKey: String = ApiKeyValidator().requireValid(publishableKey)
 
@@ -80,7 +79,8 @@ class Stripe internal constructor(
         StripeNetworkUtils(context.applicationContext),
         ApiKeyValidator.get().requireValid(publishableKey),
         stripeAccountId,
-        enableLogging
+        enableLogging,
+        appInfo
     )
 
     private constructor(
@@ -89,11 +89,16 @@ class Stripe internal constructor(
         stripeNetworkUtils: StripeNetworkUtils,
         publishableKey: String,
         stripeAccountId: String?,
-        enableLogging: Boolean
+        enableLogging: Boolean,
+        appInfo: AppInfo?
     ) : this(
         stripeRepository,
         stripeNetworkUtils,
-        PaymentController.create(context.applicationContext, stripeRepository, enableLogging),
+        StripePaymentController.create(
+            context.applicationContext,
+            stripeRepository,
+            enableLogging
+        ),
         publishableKey,
         stripeAccountId
     )
@@ -110,19 +115,7 @@ class Stripe internal constructor(
         paymentController,
         publishableKey,
         stripeAccountId,
-        object : TokenCreator {
-            override fun create(
-                params: Map<String, Any>,
-                options: ApiRequest.Options,
-                @Token.TokenType tokenType: String,
-                executor: Executor?,
-                callback: ApiResultCallback<Token>
-            ) {
-                executeTask(executor,
-                    CreateTokenTask(stripeRepository, params, options,
-                        tokenType, callback))
-            }
-        }
+        CoroutineScope(Dispatchers.IO)
     )
 
     //
@@ -170,6 +163,27 @@ class Stripe internal constructor(
 
     /**
      * Authenticate a [PaymentIntent].
+     * Used for [manual confirmation](https://stripe.com/docs/payments/payment-intents/android-manual) flow.
+     *
+     * @param activity the `Activity` that is launching the payment authentication flow
+     * @param clientSecret the [client_secret](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-client_secret)
+     * property of a confirmed [PaymentIntent] object
+     */
+    @Deprecated("Rename to better reflect behavior and match iOS naming.",
+        ReplaceWith("handleNextActionForPayment(activity, clientSecret)"))
+    @UiThread
+    fun authenticatePayment(activity: Activity, clientSecret: String) {
+        paymentController.startAuth(
+            AuthActivityStarter.Host.create(activity),
+            clientSecret,
+            ApiRequest.Options(publishableKey, stripeAccountId)
+        )
+    }
+
+    /**
+     * Handle the [next_action](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-next_action)
+     * for a previously confirmed [PaymentIntent].
+     *
      * Used for [manual confirmation](https://stripe.com/docs/payments/payment-intents/quickstart#manual-confirmation-flow) flow.
      *
      * @param activity the `Activity` that is launching the payment authentication flow
@@ -177,7 +191,7 @@ class Stripe internal constructor(
      * property of a confirmed [PaymentIntent] object
      */
     @UiThread
-    fun authenticatePayment(activity: Activity, clientSecret: String) {
+    fun handleNextActionForPayment(activity: Activity, clientSecret: String) {
         paymentController.startAuth(
             AuthActivityStarter.Host.create(activity),
             clientSecret,
@@ -193,6 +207,8 @@ class Stripe internal constructor(
      * @param clientSecret the [client_secret](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-client_secret)
      * property of a confirmed [PaymentIntent] object
      */
+    @Deprecated("Rename to better reflect behavior and match iOS naming.",
+        ReplaceWith("handleNextActionForPayment(fragment, clientSecret)"))
     @UiThread
     fun authenticatePayment(fragment: Fragment, clientSecret: String) {
         paymentController.startAuth(
@@ -203,9 +219,28 @@ class Stripe internal constructor(
     }
 
     /**
+     * Handle the [next_action](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-next_action)
+     * for a previously confirmed [PaymentIntent].
+     *
+     * Used for [manual confirmation](https://stripe.com/docs/payments/payment-intents/android-manual) flow.
+     *
+     * @param fragment the `Fragment` that is launching the payment authentication flow
+     * @param clientSecret the [client_secret](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-client_secret)
+     * property of a confirmed [PaymentIntent] object
+     */
+    @UiThread
+    fun handleNextActionForPayment(fragment: Fragment, clientSecret: String) {
+        paymentController.startAuth(
+            AuthActivityStarter.Host.create(fragment),
+            clientSecret,
+            ApiRequest.Options(publishableKey, stripeAccountId)
+        )
+    }
+
+    /**
      * Should be called via `Activity#onActivityResult(int, int, Intent)}}` to handle the
      * result of a PaymentIntent automatic confirmation (see [confirmPayment]) or
-     * manual confirmation (see [authenticatePayment]})
+     * manual confirmation (see [handleNextActionForPayment]})
      */
     @UiThread
     fun onPaymentResult(
@@ -314,8 +349,27 @@ class Stripe internal constructor(
      * @param clientSecret the [client_secret](https://stripe.com/docs/api/setup_intents/object#setup_intent_object-client_secret)
      * property of a confirmed [SetupIntent] object
      */
+    @Deprecated("Rename to better reflect behavior and match iOS naming.",
+        ReplaceWith("handleNextActionForSetupIntent(activity, clientSecret)"))
     @UiThread
     fun authenticateSetup(activity: Activity, clientSecret: String) {
+        paymentController.startAuth(
+            AuthActivityStarter.Host.create(activity),
+            clientSecret,
+            ApiRequest.Options(publishableKey, stripeAccountId)
+        )
+    }
+
+    /**
+     * Handle [next_action](https://stripe.com/docs/api/setup_intents/object#setup_intent_object-next_action)
+     * for a previously confirmed [SetupIntent]. Used for manual confirmation flow.
+     *
+     * @param activity the `Activity` that is launching the payment authentication flow
+     * @param clientSecret the [client_secret](https://stripe.com/docs/api/setup_intents/object#setup_intent_object-client_secret)
+     * property of a confirmed [SetupIntent] object
+     */
+    @UiThread
+    fun handleNextActionForSetupIntent(activity: Activity, clientSecret: String) {
         paymentController.startAuth(
             AuthActivityStarter.Host.create(activity),
             clientSecret,
@@ -330,8 +384,27 @@ class Stripe internal constructor(
      * @param clientSecret the [client_secret](https://stripe.com/docs/api/setup_intents/object#setup_intent_object-client_secret)
      * property of a confirmed [SetupIntent] object
      */
+    @Deprecated("Rename to better reflect behavior and match iOS naming.",
+        ReplaceWith("handleNextActionForSetupIntent(fragment, clientSecret)"))
     @UiThread
     fun authenticateSetup(fragment: Fragment, clientSecret: String) {
+        paymentController.startAuth(
+            AuthActivityStarter.Host.create(fragment),
+            clientSecret,
+            ApiRequest.Options(publishableKey, stripeAccountId)
+        )
+    }
+
+    /**
+     * Handle [next_action](https://stripe.com/docs/api/setup_intents/object#setup_intent_object-next_action)
+     * for a previously confirmed [SetupIntent]. Used for manual confirmation flow.
+     *
+     * @param fragment the `Fragment` launching the payment authentication flow
+     * @param clientSecret the [client_secret](https://stripe.com/docs/api/setup_intents/object#setup_intent_object-client_secret)
+     * property of a confirmed [SetupIntent] object
+     */
+    @UiThread
+    fun handleNextActionForSetupIntent(fragment: Fragment, clientSecret: String) {
         paymentController.startAuth(
             AuthActivityStarter.Host.create(fragment),
             clientSecret,
@@ -425,7 +498,7 @@ class Stripe internal constructor(
     ) {
         CreatePaymentMethodTask(
             stripeRepository, paymentMethodCreateParams, publishableKey,
-            stripeAccountId, callback
+            stripeAccountId, workScope, callback
         ).execute()
     }
 
@@ -471,7 +544,7 @@ class Stripe internal constructor(
         callback: ApiResultCallback<Source>
     ) {
         CreateSourceTask(
-            stripeRepository, sourceParams, publishableKey, stripeAccountId, callback
+            stripeRepository, sourceParams, publishableKey, stripeAccountId, workScope, callback
         ).execute()
     }
 
@@ -507,7 +580,7 @@ class Stripe internal constructor(
      * `GET /v1/sources/:id`
      *
      * @param sourceId the [Source.id] field of the desired Source object
-     * @param clientSecret the [Source.getClientSecret] field of the desired Source object
+     * @param clientSecret the [Source.clientSecret] field of the desired Source object
      * @return a [Source] if one could be found based on the input params, or `null` if
      * no such Source could be found.
      * @throws AuthenticationException failure to properly authenticate yourself (check your key)
@@ -537,11 +610,14 @@ class Stripe internal constructor(
      * `POST /v1/tokens`
      *
      * @param accountParams the [AccountParams] used to create this token
+     * @param idempotencyKey optional, see [Idempotent Requests](https://stripe.com/docs/api/idempotent_requests)
      * @param callback a [ApiResultCallback] to receive the result or error
      */
     @UiThread
+    @JvmOverloads
     fun createAccountToken(
         accountParams: AccountParams,
+        idempotencyKey: String? = null,
         callback: ApiResultCallback<Token>
     ) {
         val params = accountParams.toParamMap()
@@ -549,6 +625,7 @@ class Stripe internal constructor(
         createTokenFromParams(
             params,
             Token.TokenType.ACCOUNT,
+            idempotencyKey,
             callback
         )
     }
@@ -561,7 +638,10 @@ class Stripe internal constructor(
      * `POST /v1/tokens`
      *
      * @param accountParams params to use for this token.
+     * @param idempotencyKey optional, see [Idempotent Requests](https://stripe.com/docs/api/idempotent_requests)
+     *
      * @return a [Token] that can be used for this account.
+     *
      * @throws AuthenticationException failure to properly authenticate yourself (check your key)
      * @throws InvalidRequestException your request has invalid parameters
      * @throws APIConnectionException failure to connect to Stripe's API
@@ -571,11 +651,15 @@ class Stripe internal constructor(
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, APIException::class)
     @WorkerThread
-    fun createAccountTokenSynchronous(accountParams: AccountParams): Token? {
+    @JvmOverloads
+    fun createAccountTokenSynchronous(
+        accountParams: AccountParams,
+        idempotencyKey: String? = null
+    ): Token? {
         return try {
             stripeRepository.createToken(
                 accountParams.toParamMap(),
-                ApiRequest.Options(publishableKey, stripeAccountId),
+                ApiRequest.Options(publishableKey, stripeAccountId, idempotencyKey),
                 Token.TokenType.ACCOUNT
             )
         } catch (exception: CardException) {
@@ -591,11 +675,14 @@ class Stripe internal constructor(
      * `POST /v1/tokens`
      *
      * @param bankAccount the [BankAccount] used to create this token
+     * @param idempotencyKey optional, see [Idempotent Requests](https://stripe.com/docs/api/idempotent_requests)
      * @param callback a [ApiResultCallback] to receive the result or error
      */
     @UiThread
+    @JvmOverloads
     fun createBankAccountToken(
         bankAccount: BankAccount,
+        idempotencyKey: String? = null,
         callback: ApiResultCallback<Token>
     ) {
         val params = bankAccount.toParamMap()
@@ -603,6 +690,7 @@ class Stripe internal constructor(
         createTokenFromParams(
             params,
             Token.TokenType.BANK_ACCOUNT,
+            idempotencyKey,
             callback
         )
     }
@@ -615,7 +703,10 @@ class Stripe internal constructor(
      * `POST /v1/tokens`
      *
      * @param bankAccount the [Card] to use for this token
+     * @param idempotencyKey optional, see [Idempotent Requests](https://stripe.com/docs/api/idempotent_requests)
+     *
      * @return a [Token] that can be used for this [BankAccount]
+     *
      * @throws AuthenticationException failure to properly authenticate yourself (check your key)
      * @throws InvalidRequestException your request has invalid parameters
      * @throws APIConnectionException failure to connect to Stripe's API
@@ -627,12 +718,16 @@ class Stripe internal constructor(
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, CardException::class, APIException::class)
     @WorkerThread
-    fun createBankAccountTokenSynchronous(bankAccount: BankAccount): Token? {
+    @JvmOverloads
+    fun createBankAccountTokenSynchronous(
+        bankAccount: BankAccount,
+        idempotencyKey: String? = null
+    ): Token? {
         val params = bankAccount.toParamMap()
             .plus(stripeNetworkUtils.createUidParams())
         return stripeRepository.createToken(
             params,
-            ApiRequest.Options(publishableKey, stripeAccountId),
+            ApiRequest.Options(publishableKey, stripeAccountId, idempotencyKey),
             Token.TokenType.BANK_ACCOUNT
         )
     }
@@ -640,21 +735,24 @@ class Stripe internal constructor(
     /**
      * Create a PII token asynchronously.
      *
-     *
      * See [Create a PII account token](https://stripe.com/docs/api/tokens/create_pii).
      * `POST /v1/tokens`
      *
      * @param personalId the personal id used to create this token
+     * @param idempotencyKey optional, see [Idempotent Requests](https://stripe.com/docs/api/idempotent_requests)
      * @param callback a [ApiResultCallback] to receive the result or error
      */
     @UiThread
+    @JvmOverloads
     fun createPiiToken(
         personalId: String,
+        idempotencyKey: String? = null,
         callback: ApiResultCallback<Token>
     ) {
         createTokenFromParams(
             PiiTokenParams(personalId).toParamMap(),
             Token.TokenType.PII,
+            idempotencyKey,
             callback
         )
     }
@@ -667,7 +765,10 @@ class Stripe internal constructor(
      * `POST /v1/tokens`
      *
      * @param personalId the personal ID to use for this token
+     * @param idempotencyKey optional, see [Idempotent Requests](https://stripe.com/docs/api/idempotent_requests)
+     *
      * @return a [Token] that can be used for this card
+     *
      * @throws AuthenticationException failure to properly authenticate yourself (check your key)
      * @throws InvalidRequestException your request has invalid parameters
      * @throws APIConnectionException failure to connect to Stripe's API
@@ -677,10 +778,14 @@ class Stripe internal constructor(
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, CardException::class, APIException::class)
     @WorkerThread
-    fun createPiiTokenSynchronous(personalId: String): Token? {
+    @JvmOverloads
+    fun createPiiTokenSynchronous(
+        personalId: String,
+        idempotencyKey: String? = null
+    ): Token? {
         return stripeRepository.createToken(
             PiiTokenParams(personalId).toParamMap(),
-            ApiRequest.Options(publishableKey, stripeAccountId),
+            ApiRequest.Options(publishableKey, stripeAccountId, idempotencyKey),
             Token.TokenType.PII
         )
     }
@@ -692,13 +797,47 @@ class Stripe internal constructor(
      * `POST /v1/tokens`
      *
      * @param card the [Card] used to create this payment token
+     * @param idempotencyKey optional, see [Idempotent Requests](https://stripe.com/docs/api/idempotent_requests)
      * @param callback a [ApiResultCallback] to receive the result or error
      */
+    @Deprecated("Deprecated, replace with Stripe#createCardToken()",
+        ReplaceWith("createCardToken(card, idempotencyKey, callback)"))
     @UiThread
-    fun createToken(card: Card, callback: ApiResultCallback<Token>) {
+    @JvmOverloads
+    fun createToken(
+        card: Card,
+        idempotencyKey: String? = null,
+        callback: ApiResultCallback<Token>
+    ) {
         createTokenFromParams(
             stripeNetworkUtils.createCardTokenParams(card),
             Token.TokenType.CARD,
+            idempotencyKey,
+            callback
+        )
+    }
+
+    /**
+     * Create a Card token asynchronously.
+     *
+     * See [Create a card token](https://stripe.com/docs/api/tokens/create_card).
+     * `POST /v1/tokens`
+     *
+     * @param card the [Card] used to create this payment token
+     * @param idempotencyKey optional, see [Idempotent Requests](https://stripe.com/docs/api/idempotent_requests)
+     * @param callback a [ApiResultCallback] to receive the result or error
+     */
+    @UiThread
+    @JvmOverloads
+    fun createCardToken(
+        card: Card,
+        idempotencyKey: String? = null,
+        callback: ApiResultCallback<Token>
+    ) {
+        createTokenFromParams(
+            stripeNetworkUtils.createCardTokenParams(card),
+            Token.TokenType.CARD,
+            idempotencyKey,
             callback
         )
     }
@@ -711,6 +850,8 @@ class Stripe internal constructor(
      * `POST /v1/tokens`
      *
      * @param card the [Card] to use for this token
+     * @param idempotencyKey optional, see [Idempotent Requests](https://stripe.com/docs/api/idempotent_requests)
+     *
      * @return a [Token] that can be used for this card
      * @throws AuthenticationException failure to properly authenticate yourself (check your key)
      * @throws InvalidRequestException your request has invalid parameters
@@ -722,10 +863,14 @@ class Stripe internal constructor(
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, CardException::class, APIException::class)
     @WorkerThread
-    fun createCardTokenSynchronous(card: Card): Token? {
+    @JvmOverloads
+    fun createCardTokenSynchronous(
+        card: Card,
+        idempotencyKey: String? = null
+    ): Token? {
         return stripeRepository.createToken(
             stripeNetworkUtils.createCardTokenParams(card),
-            ApiRequest.Options(publishableKey, stripeAccountId),
+            ApiRequest.Options(publishableKey, stripeAccountId, idempotencyKey),
             Token.TokenType.CARD
         )
     }
@@ -736,16 +881,20 @@ class Stripe internal constructor(
      * `POST /v1/tokens`
      *
      * @param cvc the CVC used to create this token
+     * @param idempotencyKey optional, see [Idempotent Requests](https://stripe.com/docs/api/idempotent_requests)
      * @param callback a [ApiResultCallback] to receive the result or error
      */
     @UiThread
+    @JvmOverloads
     fun createCvcUpdateToken(
         @Size(min = 3, max = 4) cvc: String,
+        idempotencyKey: String? = null,
         callback: ApiResultCallback<Token>
     ) {
         createTokenFromParams(
             CvcTokenParams(cvc).toParamMap(),
             Token.TokenType.CVC_UPDATE,
+            idempotencyKey,
             callback
         )
     }
@@ -757,7 +906,10 @@ class Stripe internal constructor(
      * `POST /v1/tokens`
      *
      * @param cvc the CVC to use for this token
+     * @param idempotencyKey optional, see [Idempotent Requests](https://stripe.com/docs/api/idempotent_requests)
+     *
      * @return a [Token] that can be used for this card
+     *
      * @throws AuthenticationException failure to properly authenticate yourself (check your key)
      * @throws InvalidRequestException your request has invalid parameters
      * @throws APIConnectionException failure to connect to Stripe's API
@@ -767,10 +919,14 @@ class Stripe internal constructor(
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, CardException::class, APIException::class)
     @WorkerThread
-    fun createCvcUpdateTokenSynchronous(cvc: String): Token? {
+    @JvmOverloads
+    fun createCvcUpdateTokenSynchronous(
+        cvc: String,
+        idempotencyKey: String? = null
+    ): Token? {
         return stripeRepository.createToken(
             CvcTokenParams(cvc).toParamMap(),
-            ApiRequest.Options(publishableKey, stripeAccountId),
+            ApiRequest.Options(publishableKey, stripeAccountId, idempotencyKey),
             Token.TokenType.CVC_UPDATE
         )
     }
@@ -778,25 +934,14 @@ class Stripe internal constructor(
     private fun createTokenFromParams(
         tokenParams: Map<String, Any>,
         @Token.TokenType tokenType: String,
+        idempotencyKey: String? = null,
         callback: ApiResultCallback<Token>
     ) {
-        tokenCreator.create(
-            tokenParams,
-            ApiRequest.Options(publishableKey, stripeAccountId),
-            tokenType, null,
-            callback
-        )
-    }
-
-    @VisibleForTesting
-    internal interface TokenCreator {
-        fun create(
-            params: Map<String, Any>,
-            options: ApiRequest.Options,
-            @Token.TokenType tokenType: String,
-            executor: Executor?,
-            callback: ApiResultCallback<Token>
-        )
+        CreateTokenTask(
+            stripeRepository, tokenParams,
+            ApiRequest.Options(publishableKey, stripeAccountId, idempotencyKey),
+            tokenType, workScope, callback
+        ).execute()
     }
 
     private class CreateSourceTask internal constructor(
@@ -804,13 +949,14 @@ class Stripe internal constructor(
         private val sourceParams: SourceParams,
         publishableKey: String,
         stripeAccount: String?,
+        workScope: CoroutineScope = CoroutineScope(Dispatchers.IO),
         callback: ApiResultCallback<Source>
-    ) : ApiOperation<Source>(callback) {
+    ) : ApiOperation<Source>(workScope, callback) {
         private val options: ApiRequest.Options =
             ApiRequest.Options(publishableKey, stripeAccount)
 
         @Throws(StripeException::class)
-        override fun getResult(): Source? {
+        override suspend fun getResult(): Source? {
             return stripeRepository.createSource(sourceParams, options)
         }
     }
@@ -820,13 +966,14 @@ class Stripe internal constructor(
         private val paymentMethodCreateParams: PaymentMethodCreateParams,
         publishableKey: String,
         stripeAccount: String?,
+        workScope: CoroutineScope = CoroutineScope(Dispatchers.IO),
         callback: ApiResultCallback<PaymentMethod>
-    ) : ApiOperation<PaymentMethod>(callback) {
+    ) : ApiOperation<PaymentMethod>(workScope, callback) {
         private val options: ApiRequest.Options =
             ApiRequest.Options(publishableKey, stripeAccount)
 
         @Throws(StripeException::class)
-        override fun getResult(): PaymentMethod? {
+        override suspend fun getResult(): PaymentMethod? {
             return stripeRepository.createPaymentMethod(paymentMethodCreateParams, options)
         }
     }
@@ -836,11 +983,11 @@ class Stripe internal constructor(
         private val tokenParams: Map<String, Any>,
         private val options: ApiRequest.Options,
         @param:Token.TokenType @field:Token.TokenType private val tokenType: String,
+        workScope: CoroutineScope = CoroutineScope(Dispatchers.IO),
         callback: ApiResultCallback<Token>
-    ) : ApiOperation<Token>(callback) {
-
+    ) : ApiOperation<Token>(workScope, callback) {
         @Throws(StripeException::class)
-        override fun getResult(): Token? {
+        override suspend fun getResult(): Token? {
             return stripeRepository.createToken(tokenParams, options, tokenType)
         }
     }
@@ -858,16 +1005,5 @@ class Stripe internal constructor(
          */
         @JvmStatic
         var appInfo: AppInfo? = null
-
-        private fun executeTask(
-            executor: Executor?,
-            task: AsyncTask<Void, Void, *>
-        ) {
-            if (executor != null) {
-                task.executeOnExecutor(executor)
-            } else {
-                task.execute()
-            }
-        }
     }
 }

@@ -22,7 +22,9 @@ class ExpiryDateEditText @JvmOverloads constructor(
         listenForTextChanges()
     }
 
-    private var expiryDateEditListener: ExpiryDateEditListener? = null
+    // invoked when a valid date has been entered
+    @JvmSynthetic
+    internal var completionCallback: () -> Unit = {}
 
     /**
      * Gets whether or not the date currently entered is valid and not yet passed.
@@ -67,16 +69,15 @@ class ExpiryDateEditText @JvmOverloads constructor(
         info.text = accLabel
     }
 
-    internal fun setExpiryDateEditListener(expiryDateEditListener: ExpiryDateEditListener?) {
-        this.expiryDateEditListener = expiryDateEditListener
-    }
-
     private fun listenForTextChanges() {
         addTextChangedListener(object : TextWatcher {
-            var ignoreChanges = false
-            var latestChangeStart: Int = 0
-            var latestInsertionSize: Int = 0
-            var parts: Array<String> = arrayOf("", "")
+            private var ignoreChanges = false
+            private var latestChangeStart: Int = 0
+            private var latestInsertionSize: Int = 0
+            private var parts: Array<String> = arrayOf("", "")
+
+            private var newCursorPosition: Int? = null
+            private var formattedDate: String? = null
 
             // two-digit month
             val month: String
@@ -146,19 +147,26 @@ class ExpiryDateEditText @JvmOverloads constructor(
                 formattedDateBuilder.append(year)
 
                 val formattedDate = formattedDateBuilder.toString()
-                val cursorPosition = updateSelectionIndex(
-                    formattedDate.length,
-                    latestChangeStart,
-                    latestInsertionSize,
-                    MAX_INPUT_LENGTH)
-
-                ignoreChanges = true
-                setText(formattedDate)
-                setSelection(cursorPosition)
-                ignoreChanges = false
+                this.newCursorPosition = updateSelectionIndex(formattedDate.length,
+                    latestChangeStart, latestInsertionSize, MAX_INPUT_LENGTH)
+                this.formattedDate = formattedDate
             }
 
             override fun afterTextChanged(s: Editable) {
+                if (ignoreChanges) {
+                    return
+                }
+
+                ignoreChanges = true
+                if (formattedDate != null) {
+                    setText(formattedDate)
+                    newCursorPosition?.let {
+                        setSelection(it)
+                    }
+                }
+
+                ignoreChanges = false
+
                 // Note: we want to show an error state if the month is invalid or the
                 // final, complete date is in the past. We don't want to show an error state for
                 // incomplete entries.
@@ -178,13 +186,16 @@ class ExpiryDateEditText @JvmOverloads constructor(
                     // to show an error.
                     shouldShowError = !isDateValid
                     if (!wasComplete && isDateValid) {
-                        expiryDateEditListener?.onExpiryDateComplete()
+                        completionCallback()
                     }
                 } else {
                     isDateValid = false
                 }
 
                 this@ExpiryDateEditText.shouldShowError = shouldShowError
+
+                formattedDate = null
+                newCursorPosition = null
             }
         })
     }
@@ -250,11 +261,7 @@ class ExpiryDateEditText @JvmOverloads constructor(
         isDateValid = DateUtils.isExpiryDataValid(inputMonth, inputYear)
     }
 
-    internal interface ExpiryDateEditListener {
-        fun onExpiryDateComplete()
-    }
-
-    companion object {
+    private companion object {
         private const val INVALID_INPUT = -1
         private const val MAX_INPUT_LENGTH = 5
     }

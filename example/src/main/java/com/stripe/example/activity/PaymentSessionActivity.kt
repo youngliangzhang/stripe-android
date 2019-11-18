@@ -7,9 +7,9 @@ import android.content.IntentFilter
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.stripe.android.CustomerSession
-import com.stripe.android.PayWithGoogleUtils.getPriceString
 import com.stripe.android.PaymentSession
 import com.stripe.android.PaymentSessionConfig
 import com.stripe.android.PaymentSessionData
@@ -25,6 +25,7 @@ import com.stripe.android.view.PaymentFlowExtras.EXTRA_DEFAULT_SHIPPING_METHOD
 import com.stripe.android.view.PaymentFlowExtras.EXTRA_IS_SHIPPING_INFO_VALID
 import com.stripe.android.view.PaymentFlowExtras.EXTRA_SHIPPING_INFO_DATA
 import com.stripe.android.view.PaymentFlowExtras.EXTRA_VALID_SHIPPING_METHODS
+import com.stripe.android.view.PaymentUtils
 import com.stripe.android.view.ShippingInfoWidget
 import com.stripe.example.R
 import com.stripe.example.controller.ErrorDialogHandler
@@ -43,6 +44,7 @@ class PaymentSessionActivity : AppCompatActivity() {
     private lateinit var broadcastReceiver: BroadcastReceiver
     private lateinit var errorDialogHandler: ErrorDialogHandler
     private lateinit var paymentSession: PaymentSession
+    private lateinit var notSelectedText: String
 
     private var paymentSessionData: PaymentSessionData? = null
 
@@ -50,12 +52,13 @@ class PaymentSessionActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_payment_session)
 
+        notSelectedText = getString(R.string.not_selected)
+
         progress_bar.visibility = View.VISIBLE
         errorDialogHandler = ErrorDialogHandler(this)
 
         // CustomerSession only needs to be initialized once per app.
-        val customerSession = createCustomerSession()
-        paymentSession = createPaymentSession(customerSession)
+        paymentSession = createPaymentSession(savedInstanceState)
 
         val localBroadcastManager = LocalBroadcastManager.getInstance(this)
         broadcastReceiver = object : BroadcastReceiver() {
@@ -98,11 +101,12 @@ class PaymentSessionActivity : AppCompatActivity() {
         return CustomerSession.getInstance()
     }
 
-    private fun createPaymentSession(customerSession: CustomerSession): PaymentSession {
+    private fun createPaymentSession(savedInstanceState: Bundle?): PaymentSession {
+        val customerSession = createCustomerSession()
         val paymentSession = PaymentSession(this)
         val paymentSessionInitialized = paymentSession.init(
-            PaymentSessionListenerImpl(this, customerSession),
-            PaymentSessionConfig.Builder()
+            listener = PaymentSessionListenerImpl(this, customerSession),
+            paymentSessionConfig = PaymentSessionConfig.Builder()
                 .setAddPaymentMethodFooter(R.layout.add_payment_method_footer)
                 .setPrepopulatedShippingInfo(EXAMPLE_SHIPPING_INFO)
                 .setHiddenShippingInfoFields(
@@ -113,7 +117,9 @@ class PaymentSessionActivity : AppCompatActivity() {
                 // Optionally specify the `PaymentMethod.Type` values to use.
                 // Defaults to `PaymentMethod.Type.Card`
                 .setPaymentMethodTypes(listOf(PaymentMethod.Type.Card))
-                .build())
+                .build(),
+            savedInstanceState = savedInstanceState
+        )
         if (paymentSessionInitialized) {
             paymentSession.setCartTotal(2000L)
         }
@@ -121,28 +127,45 @@ class PaymentSessionActivity : AppCompatActivity() {
         return paymentSession
     }
 
-    private fun formatStringResults(data: PaymentSessionData): String {
-        val currency = Currency.getInstance("USD")
-        val stringBuilder = StringBuilder()
+    private fun createPaymentMethodDescription(data: PaymentSessionData): String {
+        return data.paymentMethod?.let { paymentMethod ->
+            paymentMethod.card?.let { card ->
+                "${card.brand} ending in ${card.last4}"
+            } ?: paymentMethod.type
+        } ?: notSelectedText
+    }
 
-        data.paymentMethod?.card?.let { card ->
-            stringBuilder
-                .append("Payment Info:\n${card.brand} ending in ${card.last4}")
-                .append(if (data.isPaymentReadyToCharge) " IS " else " IS NOT ready to charge.\n\n")
+    private fun createShippingInfoDescription(shippingInformation: ShippingInformation?): String {
+        return if (shippingInformation != null) {
+            listOfNotNull(
+                shippingInformation.name,
+                shippingInformation.address?.line1,
+                shippingInformation.address?.line2,
+                shippingInformation.address?.city,
+                shippingInformation.address?.state,
+                shippingInformation.address?.country,
+                shippingInformation.address?.postalCode,
+                shippingInformation.phone
+            ).joinToString("\n")
+        } else {
+            notSelectedText
         }
-        data.shippingInformation?.let { shippingInformation ->
-            stringBuilder
-                .append("Shipping Info: \n${shippingInformation}\n\n")
-        }
-        data.shippingMethod?.let { shippingMethod ->
-            stringBuilder.append("Shipping Method: \n${shippingMethod}\n")
-            if (data.shippingTotal > 0) {
-                stringBuilder.append("Shipping total: ")
-                    .append(getPriceString(data.shippingTotal, currency))
-            }
-        }
+    }
 
-        return stringBuilder.toString()
+    private fun createShippingMethodDescription(shippingMethod: ShippingMethod?): String {
+        return if (shippingMethod != null) {
+            listOfNotNull(
+                shippingMethod.label,
+                shippingMethod.detail,
+                PaymentUtils.formatPriceStringUsingFree(
+                    shippingMethod.amount,
+                    Currency.getInstance("USD"),
+                    "Free"
+                )
+            ).joinToString("\n")
+        } else {
+            notSelectedText
+        }
     }
 
     private fun createSampleShippingMethods(): ArrayList<ShippingMethod> {
@@ -165,6 +188,11 @@ class PaymentSessionActivity : AppCompatActivity() {
         LocalBroadcastManager.getInstance(this).unregisterReceiver(broadcastReceiver)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        paymentSession.savePaymentSessionInstanceState(outState)
+    }
+
     private fun onPaymentSessionDataChanged(
         customerSession: CustomerSession,
         data: PaymentSessionData
@@ -182,8 +210,22 @@ class PaymentSessionActivity : AppCompatActivity() {
         btn_start_payment_flow.isEnabled = true
 
         paymentSessionData?.let { paymentSessionData ->
-            tv_payment_session_data_title.visibility = View.VISIBLE
-            tv_payment_session_data.text = formatStringResults(paymentSessionData)
+            tv_ready_to_charge.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                if (paymentSessionData.isPaymentReadyToCharge) {
+                    ContextCompat.getDrawable(this, R.drawable.ic_check)
+                } else {
+                    ContextCompat.getDrawable(this, R.drawable.ic_cancel)
+                },
+                null, null, null
+            )
+
+            tv_payment_method.text = createPaymentMethodDescription(paymentSessionData)
+
+            tv_shipping_info.text =
+                createShippingInfoDescription(paymentSessionData.shippingInformation)
+
+            tv_shipping_method.text =
+                createShippingMethodDescription(paymentSessionData.shippingMethod)
         }
     }
 
@@ -222,7 +264,7 @@ class PaymentSessionActivity : AppCompatActivity() {
         }
     }
 
-    companion object {
+    private companion object {
         private val EXAMPLE_SHIPPING_INFO = ShippingInformation(
             Address.Builder()
                 .setCity("San Francisco")

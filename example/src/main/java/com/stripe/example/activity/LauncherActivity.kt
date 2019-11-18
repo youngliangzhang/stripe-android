@@ -3,12 +3,12 @@ package com.stripe.example.activity
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.stripe.android.PaymentConfiguration
 import com.stripe.example.R
 import com.stripe.example.Settings
@@ -23,7 +23,9 @@ class LauncherActivity : AppCompatActivity() {
         PaymentConfiguration.init(this, Settings.PUBLISHABLE_KEY)
 
         val linearLayoutManager = LinearLayoutManager(this)
-        linearLayoutManager.orientation = LinearLayoutManager.VERTICAL
+            .apply {
+                orientation = LinearLayoutManager.VERTICAL
+            }
 
         examples.run {
             setHasFixedSize(true)
@@ -34,16 +36,16 @@ class LauncherActivity : AppCompatActivity() {
 
     private class ExamplesAdapter constructor(
         private val activity: Activity
-    ) : androidx.recyclerview.widget.RecyclerView.Adapter<ExamplesAdapter.ExamplesViewHolder>() {
+    ) : RecyclerView.Adapter<ExamplesAdapter.ExamplesViewHolder>() {
         private val items = listOf(
             Item(activity.getString(R.string.payment_auth_example),
                 PaymentAuthActivity::class.java),
-            Item(activity.getString(R.string.create_card_tokens),
-                CardTokenActivity::class.java),
-            Item(activity.getString(R.string.create_card_payment_methods),
-                PaymentMultilineActivity::class.java),
-            Item(activity.getString(R.string.create_three_d_secure),
-                RedirectActivity::class.java),
+            Item(activity.getString(R.string.create_card_token),
+                CreateCardTokenActivity::class.java),
+            Item(activity.getString(R.string.create_card_payment_method),
+                CreateCardPaymentMethodActivity::class.java),
+            Item(activity.getString(R.string.create_card_source),
+                CreateCardSourceActivity::class.java),
             Item(activity.getString(R.string.launch_customer_session),
                 CustomerSessionActivity::class.java),
             Item(activity.getString(R.string.launch_payment_session),
@@ -59,14 +61,15 @@ class LauncherActivity : AppCompatActivity() {
         )
 
         override fun onCreateViewHolder(viewGroup: ViewGroup, i: Int): ExamplesViewHolder {
-            val root = LayoutInflater.from(viewGroup.context)
+            val root = activity.layoutInflater
                 .inflate(R.layout.launcher_item, viewGroup, false)
             return ExamplesViewHolder(root)
         }
 
         override fun onBindViewHolder(examplesViewHolder: ExamplesViewHolder, i: Int) {
-            (examplesViewHolder.itemView as TextView).text = items[i].text
-            examplesViewHolder.itemView.setOnClickListener {
+            val itemView = examplesViewHolder.itemView
+            (itemView as TextView).text = items[i].text
+            itemView.setOnClickListener {
                 activity.startActivity(Intent(activity, items[i].activityClass))
             }
         }
@@ -79,6 +82,6 @@ class LauncherActivity : AppCompatActivity() {
 
         private class ExamplesViewHolder constructor(
             itemView: View
-        ) : androidx.recyclerview.widget.RecyclerView.ViewHolder(itemView)
+        ) : RecyclerView.ViewHolder(itemView)
     }
 }

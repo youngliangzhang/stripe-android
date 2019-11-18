@@ -1,11 +1,13 @@
 package com.stripe.android
 
 import android.os.Build
+import android.os.Parcelable
 import androidx.annotation.VisibleForTesting
 import com.stripe.android.exception.InvalidRequestException
 import java.io.UnsupportedEncodingException
 import java.util.Locale
 import java.util.Objects
+import kotlinx.android.parcel.Parcelize
 import org.json.JSONObject
 
 /**
@@ -40,6 +42,10 @@ internal class ApiRequest internal constructor(
                 mapOf("Stripe-Account" to it)
             }.orEmpty()
         ).plus(
+            options.idempotencyKey?.let {
+                mapOf("Idempotency-Key" to it)
+            }.orEmpty()
+        ).plus(
             languageTag?.let { mapOf("Accept-Language" to it) }.orEmpty()
         )
     }
@@ -67,7 +73,7 @@ internal class ApiRequest internal constructor(
 
     @Throws(UnsupportedEncodingException::class, InvalidRequestException::class)
     override fun getOutputBytes(): ByteArray {
-        return createQuery().toByteArray(charset(CHARSET))
+        return query.toByteArray(charset(CHARSET))
     }
 
     override fun toString(): String {
@@ -91,16 +97,18 @@ internal class ApiRequest internal constructor(
     /**
      * Data class representing options for a Stripe API request.
      */
+    @Parcelize
     internal data class Options internal constructor(
         val apiKey: String,
-        val stripeAccount: String? = null
-    ) {
+        internal val stripeAccount: String? = null,
+        internal val idempotencyKey: String? = null
+    ) : Parcelable {
         init {
             ApiKeyValidator().requireValid(apiKey)
         }
     }
 
-    companion object {
+    internal companion object {
         internal const val MIME_TYPE = "application/x-www-form-urlencoded"
         internal const val API_HOST = "https://api.stripe.com"
 

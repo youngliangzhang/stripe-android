@@ -10,13 +10,13 @@ import com.stripe.android.view.StripeIntentResultExtras
 internal class Stripe3ds2CompletionStarter(
     private val host: AuthActivityStarter.Host,
     private val requestCode: Int
-) : AuthActivityStarter<Stripe3ds2CompletionStarter.StartData> {
+) : AuthActivityStarter<Stripe3ds2CompletionStarter.Args> {
 
-    override fun start(data: StartData) {
+    override fun start(args: Args) {
         val extras = Bundle()
         extras.putString(StripeIntentResultExtras.CLIENT_SECRET,
-            data.stripeIntent.clientSecret)
-        extras.putInt(StripeIntentResultExtras.FLOW_OUTCOME, data.outcome)
+            args.stripeIntent.clientSecret)
+        extras.putInt(StripeIntentResultExtras.FLOW_OUTCOME, args.outcome)
         host.startActivityForResult(PaymentRelayActivity::class.java, extras, requestCode)
     }
 
@@ -26,16 +26,16 @@ internal class Stripe3ds2CompletionStarter(
     @Retention(AnnotationRetention.SOURCE)
     internal annotation class ChallengeFlowOutcome {
         companion object {
-            const val COMPLETE_SUCCESSFUL = 0
-            const val COMPLETE_UNSUCCESSFUL = 1
-            const val CANCEL = 2
-            const val TIMEOUT = 3
-            const val PROTOCOL_ERROR = 4
-            const val RUNTIME_ERROR = 5
+            internal const val COMPLETE_SUCCESSFUL = 0
+            internal const val COMPLETE_UNSUCCESSFUL = 1
+            internal const val CANCEL = 2
+            internal const val TIMEOUT = 3
+            internal const val PROTOCOL_ERROR = 4
+            internal const val RUNTIME_ERROR = 5
         }
     }
 
-    internal data class StartData internal constructor(
+    internal data class Args internal constructor(
         val stripeIntent: StripeIntent,
         @param:ChallengeFlowOutcome @field:ChallengeFlowOutcome
         private val challengeFlowOutcome: Int

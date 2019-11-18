@@ -6,6 +6,7 @@ import com.nhaarman.mockitokotlin2.KArgumentCaptor
 import com.nhaarman.mockitokotlin2.any
 import com.nhaarman.mockitokotlin2.argThat
 import com.nhaarman.mockitokotlin2.argumentCaptor
+import com.nhaarman.mockitokotlin2.verify
 import com.nhaarman.mockitokotlin2.verifyNoMoreInteractions
 import com.stripe.android.exception.APIConnectionException
 import com.stripe.android.exception.APIException
@@ -35,7 +36,6 @@ import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.times
-import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
 import org.robolectric.RobolectricTestRunner
 
@@ -300,7 +300,7 @@ class StripeApiRepositoryTest {
         assertTrue(paymentMethodDataParams["guid"] is String)
         assertEquals("card", paymentMethodDataParams["type"])
 
-        verify<FireAndForgetRequestExecutor>(fireAndForgetRequestExecutor, times(2))
+        verify(fireAndForgetRequestExecutor, times(2))
             .executeAsync(stripeRequestArgumentCaptor.capture())
         val stripeRequests = stripeRequestArgumentCaptor.allValues
         val analyticsRequest = stripeRequests[1] as ApiRequest
@@ -573,6 +573,22 @@ class StripeApiRepositoryTest {
         assertTrue(fpxBankStatuses.isOnline(FpxBank.Hsbc.id))
     }
 
+    @Test
+    fun cancelPaymentIntentSource_whenAlreadyCanceled_throwsInvalidRequestException() {
+        val exception = assertFailsWith<InvalidRequestException> {
+            stripeApiRepository.cancelPaymentIntentSource(
+                "pi_1FejpSH8dsfnfKo38L276wr6",
+                "src_1FejpbH8dsfnfKo3KR7EqCzJ",
+                ApiRequest.Options(ApiKeyFixtures.FPX_PUBLISHABLE_KEY)
+            )
+        }
+        assertEquals(
+            "This PaymentIntent could be not be fulfilled via this session because a different payment method was attached to it. Another session could be attempting to fulfill this PaymentIntent. Please complete that session or try again.",
+            exception.message
+        )
+        assertEquals("payment_intent_unexpected_state", exception.errorCode)
+    }
+
     private fun create(): StripeApiRepository {
         return StripeApiRepository(
             ApplicationProvider.getApplicationContext<Context>(),
@@ -584,7 +600,7 @@ class StripeApiRepositoryTest {
         )
     }
 
-    companion object {
+    private companion object {
         private const val STRIPE_ACCOUNT_RESPONSE_HEADER = "Stripe-Account"
         private val CARD =
             Card.create("4242424242424242", 1, 2050, "123")

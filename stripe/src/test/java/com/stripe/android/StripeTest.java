@@ -3,7 +3,6 @@ package com.stripe.android;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.stripe.android.exception.AuthenticationException;
@@ -14,6 +13,7 @@ import com.stripe.android.model.AccountParams;
 import com.stripe.android.model.Address;
 import com.stripe.android.model.BankAccount;
 import com.stripe.android.model.Card;
+import com.stripe.android.model.CardFixtures;
 import com.stripe.android.model.PaymentMethod;
 import com.stripe.android.model.PaymentMethodCreateParams;
 import com.stripe.android.model.PaymentMethodCreateParamsFixtures;
@@ -30,7 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.Executor;
+import java.util.UUID;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -42,9 +42,13 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
 
+import kotlinx.coroutines.CoroutineScope;
+
 import static com.stripe.android.CardNumberFixtures.VALID_VISA_NO_SPACES;
+import static kotlinx.coroutines.CoroutineScopeKt.MainScope;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
@@ -63,17 +67,6 @@ public class StripeTest {
     private static final String NON_LOGGING_PK = ApiKeyFixtures.DEFAULT_PUBLISHABLE_KEY;
     private static final String DEFAULT_SECRET_KEY = "sk_default";
 
-    private static final ApiResultCallback<Token> DEFAULT_TOKEN_CALLBACK =
-            new ApiResultCallback<Token>() {
-                @Override
-                public void onError(@NonNull Exception error) {
-                }
-
-                @Override
-                public void onSuccess(@NonNull Token token) {
-                }
-            };
-
     private static final String TEST_CARD_NUMBER = "4242424242424242";
     private static final String TEST_BANK_ACCOUNT_NUMBER = "000123456789";
     private static final String TEST_BANK_ROUTING_NUMBER = "110000000";
@@ -91,6 +84,8 @@ public class StripeTest {
 
     @Captor private ArgumentCaptor<StripeRequest> mStripeRequestArgumentCaptor;
     @Mock private FireAndForgetRequestExecutor mFireAndForgetRequestExecutor;
+    @Mock private ApiResultCallback<Token> mApiResultCallback;
+    @Captor private ArgumentCaptor<Token> mTokenArgumentCaptor;
 
     @Before
     public void setup() {
@@ -108,7 +103,7 @@ public class StripeTest {
 
     @Test
     public void testApiVersion() {
-        assertEquals("2019-10-08", Stripe.API_VERSION);
+        assertEquals("2019-11-05", Stripe.API_VERSION);
     }
 
     @Test
@@ -142,39 +137,13 @@ public class StripeTest {
     }
 
     @Test
-    public void createTokenShouldCallTokenCreator() {
-        final boolean[] tokenCreatorCalled = { false };
-        final Stripe stripe = createStripe(
-                new Stripe.TokenCreator() {
-                    @Override
-                    public void create(@NonNull Map<String, ?> tokenParams,
-                                       @NonNull ApiRequest.Options requestOptions,
-                                       @NonNull @Token.TokenType String tokenType,
-                                       @Nullable Executor executor,
-                                       @NonNull ApiResultCallback<Token> callback) {
-                        tokenCreatorCalled[0] = true;
-                    }
-                });
-        stripe.createToken(CARD, DEFAULT_TOKEN_CALLBACK);
-        assertTrue(tokenCreatorCalled[0]);
-    }
-
-    @Test
-    public void createTokenShouldUseProvidedKey() {
-        final Stripe stripe = createStripe(
-                new Stripe.TokenCreator() {
-                    @Override
-                    public void create(@NonNull Map<String, ?> tokenParams,
-                                       @NonNull ApiRequest.Options requestOptions,
-                                       @NonNull @Token.TokenType String tokenType,
-                                       @Nullable Executor executor,
-                                       @NonNull ApiResultCallback<Token> callback) {
-                        assertEquals(NON_LOGGING_PK, requestOptions.getApiKey());
-                        assertNull(executor);
-                        assertEquals(DEFAULT_TOKEN_CALLBACK, callback);
-                    }
-                });
-        stripe.createToken(CARD, DEFAULT_TOKEN_CALLBACK);
+    public void createCardTokenShouldCreateRealToken() {
+        final Stripe stripe = createStripe(MainScope());
+        stripe.createCardToken(CARD, mApiResultCallback);
+        verify(mApiResultCallback).onSuccess(mTokenArgumentCaptor.capture());
+        final Token token = mTokenArgumentCaptor.getValue();
+        final String tokenId = token.getId();
+        assertTrue(tokenId.startsWith("tok_"));
     }
 
     @Test
@@ -669,7 +638,8 @@ public class StripeTest {
                 "123 Main St",
                 "Eureka",
                 "90210",
-                "EI");
+                "EI"
+        );
         Map<String, String> metamap = new HashMap<String, String>() {{
             put("water source", "well");
             put("type", "brackish");
@@ -832,7 +802,6 @@ public class StripeTest {
         JsonTestUtils.assertMapEquals(metamap, idealSource.getMetaData());
     }
 
-
     @Test
     public void createSourceSynchronous_withSofortParams_passesIntegrationTest()
             throws StripeException {
@@ -898,6 +867,58 @@ public class StripeTest {
         // We aren't actually updating the source on the server, so the two sources should
         // be identical.
         assertEquals(threeDSource, retrievedSource);
+    }
+
+    @Test
+    public void createSourceFromTokenParams_withExtraParams_succeeds()
+            throws StripeException {
+        final Stripe stripe = createStripe();
+        final Token token = stripe.createCardTokenSynchronous(CARD);
+        assertNotNull(token);
+
+        final Map<String, String> map = new HashMap<>();
+        map.put("usage", Source.Usage.SINGLE_USE);
+        final SourceParams sourceParams = SourceParams.createSourceFromTokenParams(token.getId())
+                .setExtraParams(map);
+
+        final Source source = stripe.createSourceSynchronous(sourceParams);
+        assertNotNull(source);
+        assertNotNull(Source.Usage.SINGLE_USE, source.getUsage());
+    }
+
+    @Test
+    public void createVisaCheckoutParams_whenUnactivated_throwsException() {
+        final Stripe stripe = createStripe();
+        final SourceParams sourceParams = SourceParams.createVisaCheckoutParams(
+                UUID.randomUUID().toString()
+        );
+        final InvalidRequestException ex = assertThrows(InvalidRequestException.class,
+                new ThrowingRunnable() {
+                    @Override
+                    public void run() throws Throwable {
+                        stripe.createSourceSynchronous(sourceParams);
+                    }
+                }
+        );
+        assertEquals("visa_checkout must be activated before use.", ex.getMessage());
+    }
+
+    @Test
+    public void createMasterpassParams_whenUnactivated_throwsException() {
+        final Stripe stripe = createStripe();
+        final SourceParams sourceParams = SourceParams.createMasterpassParams(
+                UUID.randomUUID().toString(),
+                UUID.randomUUID().toString()
+        );
+        final InvalidRequestException ex = assertThrows(InvalidRequestException.class,
+                new ThrowingRunnable() {
+                    @Override
+                    public void run() throws Throwable {
+                        stripe.createSourceSynchronous(sourceParams);
+                    }
+                }
+        );
+        assertEquals("masterpass must be activated before use.", ex.getMessage());
     }
 
     @Test
@@ -1101,6 +1122,27 @@ public class StripeTest {
     }
 
     @Test
+    public void createTokenSynchronousTwice_withIdempotencyKey_returnsSameToken()
+            throws StripeException {
+        final Stripe stripe = createStripe();
+        final String idempotencyKey = UUID.randomUUID().toString();
+        assertEquals(
+                stripe.createCardTokenSynchronous(CardFixtures.MINIMUM_CARD, idempotencyKey),
+                stripe.createCardTokenSynchronous(CardFixtures.MINIMUM_CARD, idempotencyKey)
+        );
+    }
+
+    @Test
+    public void createTokenSynchronousTwice_withoutIdempotencyKey_returnsDifferentToken()
+            throws StripeException {
+        final Stripe stripe = createStripe();
+        assertNotEquals(
+                stripe.createCardTokenSynchronous(CardFixtures.MINIMUM_CARD),
+                stripe.createCardTokenSynchronous(CardFixtures.MINIMUM_CARD)
+        );
+    }
+
+    @Test
     public void createPaymentMethodSynchronous_withCard()
             throws StripeException {
         final PaymentMethodCreateParams paymentMethodCreateParams =
@@ -1280,23 +1322,23 @@ public class StripeTest {
         return new Stripe(
                 stripeRepository,
                 new StripeNetworkUtils(mContext),
-                PaymentController.create(mContext, stripeRepository),
+                StripePaymentController.create(mContext, stripeRepository),
                 publishableKey,
                 null
         );
     }
 
     @NonNull
-    private Stripe createStripe(@NonNull Stripe.TokenCreator tokenCreator) {
+    private Stripe createStripe(@NonNull CoroutineScope workScope) {
         final StripeRepository stripeRepository = createStripeRepository(
                 new FakeFireAndForgetRequestExecutor());
         return new Stripe(
                 stripeRepository,
                 new StripeNetworkUtils(mContext),
-                PaymentController.create(mContext, stripeRepository),
+                StripePaymentController.create(mContext, stripeRepository),
                 NON_LOGGING_PK,
                 null,
-                tokenCreator
+                workScope
         );
     }
 

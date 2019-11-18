@@ -27,8 +27,19 @@ class CardNumberEditText @JvmOverloads constructor(
     var cardBrand: String = Card.CardBrand.UNKNOWN
         internal set
 
-    private var cardBrandChangeListener: CardBrandChangeListener? = null
-    private var cardNumberCompleteListener: CardNumberCompleteListener? = null
+    @JvmSynthetic
+    internal var brandChangeCallback: (String) -> Unit = {}
+        set(callback) {
+            field = callback
+
+            // Immediately display the brand if known, in case this method is invoked when
+            // partial data already exists.
+            callback(cardBrand)
+        }
+
+    // invoked when a valid card has been entered
+    @JvmSynthetic
+    internal var completionCallback: () -> Unit = {}
 
     var lengthMax: Int = MAX_LENGTH_COMMON
         private set
@@ -50,7 +61,7 @@ class CardNumberEditText @JvmOverloads constructor(
      */
     val cardNumber: String?
         get() = if (isCardNumberValid) {
-            StripeTextUtils.removeSpacesAndHyphens(text?.toString())
+            StripeTextUtils.removeSpacesAndHyphens(fieldText)
         } else {
             null
         }
@@ -62,19 +73,6 @@ class CardNumberEditText @JvmOverloads constructor(
     override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
         super.onInitializeAccessibilityNodeInfo(info)
         info.text = resources.getString(R.string.acc_label_card_number_node, text)
-    }
-
-    @JvmSynthetic
-    internal fun setCardNumberCompleteListener(listener: CardNumberCompleteListener) {
-        cardNumberCompleteListener = listener
-    }
-
-    @JvmSynthetic
-    internal fun setCardBrandChangeListener(listener: CardBrandChangeListener) {
-        cardBrandChangeListener = listener
-        // Immediately display the brand if known, in case this method is invoked when
-        // partial data already exists.
-        cardBrandChangeListener?.onCardBrandChanged(cardBrand)
     }
 
     @JvmSynthetic
@@ -132,8 +130,11 @@ class CardNumberEditText @JvmOverloads constructor(
 
     private fun listenForTextChanges() {
         addTextChangedListener(object : TextWatcher {
-            var latestChangeStart: Int = 0
-            var latestInsertionSize: Int = 0
+            private var latestChangeStart: Int = 0
+            private var latestInsertionSize: Int = 0
+
+            private var newCursorPosition: Int? = null
+            private var formattedNumber: String? = null
 
             override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) {
                 if (!ignoreChanges) {
@@ -159,40 +160,41 @@ class CardNumberEditText @JvmOverloads constructor(
                 val spacelessNumber = StripeTextUtils.removeSpacesAndHyphens(s.toString())
                     ?: return
 
-                val cardParts = ViewUtils.separateCardNumberGroups(
-                    spacelessNumber, cardBrand)
-                val formattedNumberBuilder = StringBuilder()
-                for (i in cardParts.indices) {
-                    if (cardParts[i] == null) {
-                        break
-                    }
+                val formattedNumber = createFormattedNumber(
+                    ViewUtils.separateCardNumberGroups(spacelessNumber, cardBrand)
+                )
 
-                    if (i != 0) {
-                        formattedNumberBuilder.append(' ')
-                    }
-                    formattedNumberBuilder.append(cardParts[i])
-                }
-
-                val formattedNumber = formattedNumberBuilder.toString()
-                val cursorPosition = updateSelectionIndex(formattedNumber.length,
+                this.newCursorPosition = updateSelectionIndex(formattedNumber.length,
                     latestChangeStart, latestInsertionSize)
-
-                ignoreChanges = true
-                setText(formattedNumber)
-                setSelection(cursorPosition)
-                ignoreChanges = false
+                this.formattedNumber = formattedNumber
             }
 
             override fun afterTextChanged(s: Editable) {
-                if (s.length == lengthMax) {
+                if (ignoreChanges) {
+                    return
+                }
+
+                ignoreChanges = true
+                if (formattedNumber != null) {
+                    setText(formattedNumber)
+                    newCursorPosition?.let {
+                        setSelection(it)
+                    }
+                }
+                formattedNumber = null
+                newCursorPosition = null
+
+                ignoreChanges = false
+
+                if (fieldText.length == lengthMax) {
                     val before = isCardNumberValid
-                    isCardNumberValid = CardUtils.isValidCardNumber(s.toString())
+                    isCardNumberValid = CardUtils.isValidCardNumber(fieldText)
                     shouldShowError = !isCardNumberValid
                     if (!before && isCardNumberValid) {
-                        cardNumberCompleteListener?.onCardNumberComplete()
+                        completionCallback()
                     }
                 } else {
-                    isCardNumberValid = CardUtils.isValidCardNumber(text?.toString())
+                    isCardNumberValid = CardUtils.isValidCardNumber(fieldText)
                     // Don't show errors if we aren't full-length.
                     shouldShowError = false
                 }
@@ -207,7 +209,7 @@ class CardNumberEditText @JvmOverloads constructor(
 
         cardBrand = brand
 
-        cardBrandChangeListener?.onCardBrandChanged(cardBrand)
+        brandChangeCallback(cardBrand)
 
         val oldLength = lengthMax
         lengthMax = getLengthForBrand(cardBrand)
@@ -222,15 +224,7 @@ class CardNumberEditText @JvmOverloads constructor(
         updateCardBrand(CardUtils.getPossibleCardType(partialNumber))
     }
 
-    internal interface CardNumberCompleteListener {
-        fun onCardNumberComplete()
-    }
-
-    internal interface CardBrandChangeListener {
-        fun onCardBrandChanged(@Card.CardBrand brand: String)
-    }
-
-    companion object {
+    internal companion object {
         private const val MAX_LENGTH_COMMON = 19
         // Note that AmEx and Diners Club have the same length
         // because Diners Club has one more space, but one less digit.
@@ -245,6 +239,13 @@ class CardNumberEditText @JvmOverloads constructor(
                     MAX_LENGTH_AMEX_DINERS
                 else -> MAX_LENGTH_COMMON
             }
+        }
+
+        @JvmSynthetic
+        internal fun createFormattedNumber(cardParts: Array<String?>): String {
+            return cardParts
+                .takeWhile { it != null }
+                .joinToString(" ")
         }
     }
 }

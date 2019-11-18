@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## 12.4.0 - 2019-11-13
+* [#1792](https://github.com/stripe/stripe-android/pull/1792) Remove default selection of a Payment Method from `PaymentMethodsActivity`
+* [#1797](https://github.com/stripe/stripe-android/pull/1797) Document `StripeDefaultTheme` style
+* [#1799](https://github.com/stripe/stripe-android/pull/1799) Document `Stripe3DS2Theme` and related styles
+* [#1809](https://github.com/stripe/stripe-android/pull/1809) Update to Gradle 6.0
+* [#1810](https://github.com/stripe/stripe-android/pull/1810) Update API version to [2019-11-05](https://stripe.com/docs/upgrades#2019-11-05)
+* [#1812](https://github.com/stripe/stripe-android/pull/1812) Upgrade 3DS2 SDK to 2.2.2
+* [#1813](https://github.com/stripe/stripe-android/pull/1813) Don't select a new PaymentMethod after deleting one in `PaymentMethodsActivity`
+* [#1820](https://github.com/stripe/stripe-android/pull/1820) Update `PaymentMethodsActivity` result and `PaymentSession.handlePaymentData()` logic
+    * `PaymentMethodsActivity` returns result code of `Activity.RESULT_OK` when the user selected a Payment Method
+    * `PaymentMethodsActivity` returns result code of `Activity.RESULT_CANCELED` when the user taps back via the toolbar or device back button
+    * `PaymentSession#handlePaymentData()` now calls `PaymentSessionListener#onPaymentSessionDataChanged()` for any result from `PaymentMethodsActivity`
+
+## 12.3.0 - 2019-11-05
+* [#1775](https://github.com/stripe/stripe-android/pull/1775) Add support for idempotency key on Stripe Token API requests
+* [#1777](https://github.com/stripe/stripe-android/pull/1777) Make `Card` implement `Parcelable`
+* [#1781](https://github.com/stripe/stripe-android/pull/1781) Mark `Stripe#createToken()` as `@Deprecated`; replace with `Stripe#createCardToken()`
+* [#1782](https://github.com/stripe/stripe-android/pull/1782) Mark `Stripe#authenticatePayment()` and `Stripe#authenticateSetup()` as `@Deprecated`; replace with `Stripe#handleNextActionForPayment()` and `Stripe#handleNextActionForSetupIntent()`, respectively
+* [#1784](https://github.com/stripe/stripe-android/pull/1784) Update API version to [2019-10-17](https://stripe.com/docs/upgrades#2019-10-17)
+* [#1787](https://github.com/stripe/stripe-android/pull/1787) Fix `CardNumberEditText` performance
+* [#1788](https://github.com/stripe/stripe-android/pull/1788) Fix `ExpiryDateEditText` performance
+
 ## 12.2.0 - 2019-10-31
 * [#1745](https://github.com/stripe/stripe-android/pull/1745) Make `StripeEditText` public
 * [#1746](https://github.com/stripe/stripe-android/pull/1746) Make `FpxBank` enum public

@@ -15,31 +15,30 @@ import java.util.ArrayList
  * A [RecyclerView.Adapter] that holds a set of [MaskedCardView] items for a given set
  * of [PaymentMethod] objects.
  */
-internal class PaymentMethodsAdapter @JvmOverloads constructor(
+internal class PaymentMethodsAdapter @JvmOverloads internal constructor(
     initiallySelectedPaymentMethodId: String?,
     private val intentArgs: PaymentMethodsActivityStarter.Args,
     private val addableTypes: List<PaymentMethod.Type> = listOf(PaymentMethod.Type.Card)
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-    val paymentMethods = ArrayList<PaymentMethod>()
-    var selectedPaymentMethodId: String? = initiallySelectedPaymentMethodId
-    val selectedPaymentMethod: PaymentMethod?
+    internal val paymentMethods = ArrayList<PaymentMethod>()
+    internal var selectedPaymentMethodId: String? = initiallySelectedPaymentMethodId
+    internal val selectedPaymentMethod: PaymentMethod?
         get() {
-            // return the selected Payment Method, if it exists;
-            // otherwise, return the most recently created Payment Method
             return selectedPaymentMethodId?.let { selectedPaymentMethodId ->
                 paymentMethods.firstOrNull { it.id == selectedPaymentMethodId }
-            } ?: (paymentMethods.maxBy { it.created ?: 0 })
+            }
         }
 
-    var listener: Listener? = null
+    internal var listener: Listener? = null
     private val handler = Handler(Looper.getMainLooper())
 
     init {
         setHasStableIds(true)
     }
 
-    fun setPaymentMethods(paymentMethods: List<PaymentMethod>) {
+    @JvmSynthetic
+    internal fun setPaymentMethods(paymentMethods: List<PaymentMethod>) {
         this.paymentMethods.clear()
         this.paymentMethods.addAll(paymentMethods)
         notifyDataSetChanged()
@@ -137,23 +136,15 @@ internal class PaymentMethodsAdapter @JvmOverloads constructor(
         return PaymentMethodViewHolder(itemView)
     }
 
-    fun deletePaymentMethod(paymentMethod: PaymentMethod) {
+    internal fun deletePaymentMethod(paymentMethod: PaymentMethod) {
         val indexToDelete = paymentMethods.indexOfFirst { it.id == paymentMethod.id }
         if (indexToDelete >= 0) {
-            val wasSelectedPaymentMethod =
-                selectedPaymentMethodId?.let { it == paymentMethod.id } == true
             paymentMethods.removeAt(indexToDelete)
             notifyItemRemoved(indexToDelete)
-
-            // customer has deleted their selected Payment Method,
-            // so automatically select the most recently added Payment Method
-            if (wasSelectedPaymentMethod && paymentMethods.isNotEmpty()) {
-                updateSelectedPaymentMethod(0)
-            }
         }
     }
 
-    fun resetPaymentMethod(paymentMethod: PaymentMethod) {
+    internal fun resetPaymentMethod(paymentMethod: PaymentMethod) {
         val indexToReset = paymentMethods.indexOfFirst { it.id == paymentMethod.id }
         if (indexToReset >= 0) {
             notifyItemChanged(indexToReset)
@@ -182,11 +173,11 @@ internal class PaymentMethodsAdapter @JvmOverloads constructor(
     internal class AddFpxPaymentMethodViewHolder(itemView: View) :
         RecyclerView.ViewHolder(itemView)
 
-    interface Listener {
+    internal interface Listener {
         fun onClick(paymentMethod: PaymentMethod)
     }
 
-    companion object {
+    private companion object {
         private const val TYPE_CARD = 1
         private const val TYPE_ADD_CARD = 2
         private const val TYPE_ADD_FPX = 3
