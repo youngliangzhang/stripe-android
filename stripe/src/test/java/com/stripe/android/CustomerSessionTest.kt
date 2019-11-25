@@ -640,11 +640,11 @@ class CustomerSessionTest : BaseViewTest<PaymentFlowActivity>(PaymentFlowActivit
     @Test
     fun shippingInfoScreen_whenLaunched_logs() {
         val customerSession = createCustomerSession(null)
-        CustomerSession.setInstance(customerSession)
+        CustomerSession.instance = customerSession
         createActivity(PaymentFlowActivityStarter.Args.Builder()
             .setPaymentSessionConfig(PaymentSessionConfig.Builder()
                 .build())
-            .setPaymentSessionData(PaymentSessionData())
+            .setPaymentSessionData(PaymentSessionFixtures.PAYMENT_SESSION_DATA)
             .build())
 
         assertTrue(customerSession.productUsageTokens.contains("ShippingInfoScreen"))
@@ -653,13 +653,13 @@ class CustomerSessionTest : BaseViewTest<PaymentFlowActivity>(PaymentFlowActivit
     @Test
     fun shippingMethodScreen_whenLaunched_logs() {
         val customerSession = createCustomerSession(null)
-        CustomerSession.setInstance(customerSession)
+        CustomerSession.instance = customerSession
 
         createActivity(PaymentFlowActivityStarter.Args.Builder()
             .setPaymentSessionConfig(PaymentSessionConfig.Builder()
                 .setShippingInfoRequired(false)
                 .build())
-            .setPaymentSessionData(PaymentSessionData())
+            .setPaymentSessionData(PaymentSessionFixtures.PAYMENT_SESSION_DATA)
             .build())
 
         assertTrue(customerSession.productUsageTokens.contains("ShippingMethodScreen"))

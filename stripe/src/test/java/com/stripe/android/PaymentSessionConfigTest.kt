@@ -1,12 +1,11 @@
 package com.stripe.android
 
-import com.stripe.android.model.Address
-import com.stripe.android.model.PaymentMethod
-import com.stripe.android.model.ShippingInformation
+import com.stripe.android.PaymentSessionFixtures.PAYMENT_SESSION_CONFIG
 import com.stripe.android.utils.ParcelUtils
-import com.stripe.android.view.ShippingInfoWidget
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
@@ -15,45 +14,40 @@ class PaymentSessionConfigTest {
 
     @Test
     fun testParcel() {
-        val paymentSessionConfig = PaymentSessionConfig.Builder()
+        assertEquals(PAYMENT_SESSION_CONFIG, ParcelUtils.create(PAYMENT_SESSION_CONFIG))
+        assertEquals(
+            PaymentSessionFixtures.PAYMENT_SESSION_CONFIG,
+            ParcelUtils.create(PaymentSessionFixtures.PAYMENT_SESSION_CONFIG)
+        )
+    }
 
-            // hide the phone field on the shipping information form
-            .setHiddenShippingInfoFields(
-                ShippingInfoWidget.CustomizableShippingField.ADDRESS_LINE_TWO_FIELD
+    @Test
+    fun create_withValidCountryCode_succeeds() {
+        val allowedShippingCountryCodes = setOf("us", "CA")
+        val config = PaymentSessionFixtures.PAYMENT_SESSION_CONFIG.copy(
+            allowedShippingCountryCodes = allowedShippingCountryCodes
+        )
+        assertEquals(allowedShippingCountryCodes, config.allowedShippingCountryCodes)
+    }
+
+    @Test
+    fun create_withEmptyCountryCodesList_succeeds() {
+        val config = PaymentSessionFixtures.PAYMENT_SESSION_CONFIG.copy(
+            allowedShippingCountryCodes = emptySet()
+        )
+        assertTrue(config.allowedShippingCountryCodes.isEmpty())
+    }
+
+    @Test
+    fun create_withInvalidCountryCode_throwsException() {
+        val exception = assertFailsWith<IllegalArgumentException> {
+            PaymentSessionFixtures.PAYMENT_SESSION_CONFIG.copy(
+                allowedShippingCountryCodes = setOf("invalid_country_code")
             )
-
-            // make the address line 2 field optional
-            .setOptionalShippingInfoFields(
-                ShippingInfoWidget.CustomizableShippingField.PHONE_FIELD
-            )
-
-            // specify an address to pre-populate the shipping information form
-            .setPrepopulatedShippingInfo(ShippingInformation(
-                Address.Builder()
-                    .setLine1("123 Market St")
-                    .setCity("San Francisco")
-                    .setState("CA")
-                    .setPostalCode("94107")
-                    .setCountry("US")
-                    .build(),
-                "Jenny Rosen",
-                "4158675309"
-            ))
-
-            // collect shipping information
-            .setShippingInfoRequired(true)
-
-            // collect shipping method
-            .setShippingMethodsRequired(true)
-
-            // specify the payment method types that the customer can use;
-            // defaults to PaymentMethod.Type.Card
-            .setPaymentMethodTypes(
-                listOf(PaymentMethod.Type.Card)
-            )
-
-            .build()
-
-        assertEquals(paymentSessionConfig, ParcelUtils.create(paymentSessionConfig))
+        }
+        assertEquals(
+            "'invalid_country_code' is not a valid country code",
+            exception.message
+        )
     }
 }

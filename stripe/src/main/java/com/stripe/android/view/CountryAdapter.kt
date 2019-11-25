@@ -18,20 +18,26 @@ import java.util.Locale
  */
 internal class CountryAdapter(
     context: Context,
-    initialCountries: List<String>
-) : ArrayAdapter<String>(context, R.layout.country_text_view) {
-    private val countryFilter: Filter = CountryFilter(
-        initialCountries,
+    internal var unfilteredCountries: List<Country>
+) : ArrayAdapter<Country>(context, R.layout.country_text_view) {
+    private val countryFilter: CountryFilter = CountryFilter(
+        unfilteredCountries,
         this,
         context as? Activity
     )
-    private var suggestions: List<String> = initialCountries
+    private var suggestions: List<Country> = unfilteredCountries
+
+    internal val firstItem: Country
+        @JvmSynthetic
+        get() {
+            return getItem(0)
+        }
 
     override fun getCount(): Int {
         return suggestions.size
     }
 
-    override fun getItem(i: Int): String {
+    override fun getItem(i: Int): Country {
         return suggestions[i]
     }
 
@@ -41,12 +47,12 @@ internal class CountryAdapter(
 
     override fun getView(i: Int, view: View?, viewGroup: ViewGroup): View {
         return if (view is TextView) {
-            view.text = getItem(i)
+            view.text = getItem(i).name
             view
         } else {
             val countryText = LayoutInflater.from(context).inflate(
                 R.layout.country_text_view, viewGroup, false) as TextView
-            countryText.text = getItem(i)
+            countryText.text = getItem(i).name
             countryText
         }
     }
@@ -55,8 +61,29 @@ internal class CountryAdapter(
         return countryFilter
     }
 
+    /**
+     * @param allowedCountryCodes A set of allowed country codes. Will be ignored if empty.
+     *
+     * @return `true` if [unfilteredCountries] was updated, `false` otherwise
+     */
+    internal fun updateUnfilteredCountries(allowedCountryCodes: Set<String>): Boolean {
+        if (allowedCountryCodes.isEmpty()) {
+            return false
+        }
+
+        unfilteredCountries = unfilteredCountries.filter { (countryCode) ->
+            allowedCountryCodes.any { allowedCountryCode ->
+                allowedCountryCode.equals(countryCode, ignoreCase = true)
+            }
+        }
+        countryFilter.unfilteredCountries = unfilteredCountries
+        suggestions = unfilteredCountries
+        notifyDataSetChanged()
+        return true
+    }
+
     private class CountryFilter(
-        private val initialCountries: List<String>,
+        internal var unfilteredCountries: List<Country>,
         private val adapter: CountryAdapter,
         activity: Activity?
     ) : Filter() {
@@ -66,7 +93,7 @@ internal class CountryAdapter(
             val filterResults = FilterResults()
             filterResults.values = constraint?.let {
                 filteredSuggestedCountries(constraint)
-            } ?: initialCountries
+            } ?: unfilteredCountries
             return filterResults
         }
 
@@ -74,10 +101,10 @@ internal class CountryAdapter(
             constraint: CharSequence?,
             filterResults: FilterResults?
         ) {
-            val suggestions = filterResults?.values as List<String>
+            val suggestions = filterResults?.values as List<Country>
 
             activityRef.get()?.let { activity ->
-                if (suggestions.any { it == constraint }) {
+                if (suggestions.any { it.name == constraint }) {
                     hideKeyboard(activity)
                 }
             }
@@ -86,27 +113,27 @@ internal class CountryAdapter(
             adapter.notifyDataSetChanged()
         }
 
-        private fun filteredSuggestedCountries(constraint: CharSequence?): List<String> {
+        private fun filteredSuggestedCountries(constraint: CharSequence?): List<Country> {
             val suggestedCountries = getSuggestedCountries(constraint)
 
             return if (suggestedCountries.isEmpty() || isMatch(suggestedCountries, constraint)) {
-                initialCountries
+                unfilteredCountries
             } else {
                 suggestedCountries
             }
         }
 
-        private fun getSuggestedCountries(constraint: CharSequence?): List<String> {
-            return initialCountries
+        private fun getSuggestedCountries(constraint: CharSequence?): List<Country> {
+            return unfilteredCountries
                 .filter {
-                    it.toLowerCase(Locale.ROOT).startsWith(
+                    it.name.toLowerCase(Locale.ROOT).startsWith(
                         constraint.toString().toLowerCase(Locale.ROOT)
                     )
                 }
         }
 
-        private fun isMatch(countries: List<String>, constraint: CharSequence?): Boolean {
-            return countries.size == 1 && countries[0] == constraint.toString()
+        private fun isMatch(countries: List<Country>, constraint: CharSequence?): Boolean {
+            return countries.size == 1 && countries[0].name == constraint.toString()
         }
 
         private fun hideKeyboard(activity: Activity) {

@@ -2,11 +2,15 @@ package com.stripe.android
 
 import android.os.Parcelable
 import androidx.annotation.LayoutRes
+import androidx.annotation.WorkerThread
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.ShippingInformation
+import com.stripe.android.model.ShippingMethod
 import com.stripe.android.view.SelectShippingMethodWidget
 import com.stripe.android.view.ShippingInfoWidget
 import com.stripe.android.view.ShippingInfoWidget.CustomizableShippingField
+import java.io.Serializable
+import java.util.Locale
 import kotlinx.android.parcel.Parcelize
 
 /**
@@ -24,8 +28,49 @@ data class PaymentSessionConfig internal constructor(
     @get:LayoutRes
     val addPaymentMethodFooter: Int = 0,
 
-    val paymentMethodTypes: List<PaymentMethod.Type> = listOf(PaymentMethod.Type.Card)
+    val paymentMethodTypes: List<PaymentMethod.Type> = listOf(PaymentMethod.Type.Card),
+    val allowedShippingCountryCodes: Set<String> = emptySet(),
+    internal val shippingInformationValidator: ShippingInformationValidator? = null,
+    internal val shippingMethodsFactory: ShippingMethodsFactory? = null
 ) : Parcelable {
+    init {
+        val countryCodes = Locale.getISOCountries()
+        allowedShippingCountryCodes.forEach { allowedShippingCountryCode ->
+            require(
+                countryCodes.any { allowedShippingCountryCode.equals(it, ignoreCase = true) }
+            ) {
+                "'$allowedShippingCountryCode' is not a valid country code"
+            }
+        }
+    }
+
+    internal interface ShippingInformationValidator : Serializable {
+        /**
+         * @return whether the customer's [ShippingInformation] is valid. Will run on
+         * a background thread.
+         */
+        @WorkerThread
+        fun isValid(shippingInformation: ShippingInformation): Boolean
+
+        /**
+         * @return the error message to show if [isValid] returns `false`. Will run on
+         * a background thread.
+         */
+        @WorkerThread
+        fun getErrorMessage(shippingInformation: ShippingInformation): String
+    }
+
+    internal interface ShippingMethodsFactory : Serializable {
+        /**
+         * @return a list of [ShippingMethod] options to present to the customer. Will run on
+         * a background thread.
+         */
+        @WorkerThread
+        fun create(
+            shippingInformation: ShippingInformation
+        ): List<ShippingMethod>
+    }
+
     class Builder : ObjectBuilder<PaymentSessionConfig> {
         private var shippingInfoRequired = true
         private var shippingMethodsRequired = true
@@ -33,6 +78,7 @@ data class PaymentSessionConfig internal constructor(
         private var optionalShippingInfoFields: List<String>? = null
         private var shippingInformation: ShippingInformation? = null
         private var paymentMethodTypes: List<PaymentMethod.Type> = listOf(PaymentMethod.Type.Card)
+        private var allowedShippingCountryCodes: Set<String> = emptySet()
 
         @LayoutRes
         private var addPaymentMethodFooter: Int = 0
@@ -112,6 +158,17 @@ data class PaymentSessionConfig internal constructor(
             return this
         }
 
+        /**
+         * @param allowedShippingCountryCodes A set of allowed country codes for the
+         * customer's shipping address. Will be ignored if empty.
+         */
+        fun setAllowedShippingCountryCodes(
+            allowedShippingCountryCodes: Set<String>
+        ): Builder {
+            this.allowedShippingCountryCodes = allowedShippingCountryCodes
+            return this
+        }
+
         override fun build(): PaymentSessionConfig {
             return PaymentSessionConfig(
                 hiddenShippingInfoFields = hiddenShippingInfoFields.orEmpty(),
@@ -120,12 +177,9 @@ data class PaymentSessionConfig internal constructor(
                 isShippingInfoRequired = shippingInfoRequired,
                 isShippingMethodRequired = shippingMethodsRequired,
                 addPaymentMethodFooter = addPaymentMethodFooter,
-                paymentMethodTypes = paymentMethodTypes
+                paymentMethodTypes = paymentMethodTypes,
+                allowedShippingCountryCodes = allowedShippingCountryCodes
             )
         }
-    }
-
-    internal companion object {
-        internal val EMPTY = PaymentSessionConfig()
     }
 }

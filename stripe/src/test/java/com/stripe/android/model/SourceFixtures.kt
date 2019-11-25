@@ -1,10 +1,10 @@
 package com.stripe.android.model
 
+import com.stripe.android.model.SourceOrderFixtures.SOURCE_ORDER_JSON
 import org.json.JSONObject
 
 internal object SourceFixtures {
 
-    @JvmField
     val ALIPAY_JSON = JSONObject(
         """
         {
@@ -43,8 +43,7 @@ internal object SourceFixtures {
         """.trimIndent()
     )
 
-    @JvmField
-    val WECHAT = Source.fromJson(JSONObject(
+    val WECHAT = requireNotNull(Source.fromJson(JSONObject(
         """
         {
             "id": "src_1F4ZSkBNJ02",
@@ -84,10 +83,9 @@ internal object SourceFixtures {
             }
         }
         """.trimIndent()
-    ))!!
+    )))
 
-    @JvmField
-    val SOURCE_CARD = Source.fromJson(JSONObject(
+    val SOURCE_CARD = requireNotNull(Source.fromJson(JSONObject(
         """
         {
             "id": "src_19t3xKBZqEXluyI4uz2dxAfQ",
@@ -132,10 +130,9 @@ internal object SourceFixtures {
             }
         }
         """.trimIndent()
-    ))!!
+    )))
 
-    @JvmField
-    val CARD = Source.fromJson(JSONObject(
+    val CARD = requireNotNull(Source.fromJson(JSONObject(
         """
         {
             "id": "card_1ELxrOCRMbs6FrXfdxOGjnaD",
@@ -162,9 +159,8 @@ internal object SourceFixtures {
             "tokenization_method": null
         }
         """.trimIndent()
-    ))!!
+    )))
 
-    @JvmField
     val APPLE_PAY = JSONObject(
         """
         {
@@ -194,8 +190,7 @@ internal object SourceFixtures {
         """.trimIndent()
     )
 
-    @JvmField
-    val SOURCE_REDIRECT_JSON = JSONObject(
+    private val SOURCE_REDIRECT_JSON = JSONObject(
         """
         {
             "return_url": "https://google.com",
@@ -205,11 +200,11 @@ internal object SourceFixtures {
         """.trimIndent()
     )
 
-    @JvmField
-    val SOURCE_REDIRECT = SourceRedirect.fromJson(SOURCE_REDIRECT_JSON)!!
+    val SOURCE_REDIRECT = requireNotNull(
+        SourceRedirect.fromJson(SOURCE_REDIRECT_JSON)
+    )
 
-    @JvmField
-    val SOURCE_CODE_VERIFICATION_JSON = JSONObject(
+    private val SOURCE_CODE_VERIFICATION_JSON = JSONObject(
         """
         {
             "attempts_remaining": 3,
@@ -218,13 +213,11 @@ internal object SourceFixtures {
         """.trimIndent()
     )
 
-    @JvmField
-    val SOURCE_CODE_VERIFICATION = SourceCodeVerification.fromJson(
-        SOURCE_CODE_VERIFICATION_JSON
-    )!!
+    val SOURCE_CODE_VERIFICATION = requireNotNull(
+        SourceCodeVerification.fromJson(SOURCE_CODE_VERIFICATION_JSON)
+    )
 
-    @JvmField
-    val SOURCE_RECEIVER_JSON = JSONObject(
+    private val SOURCE_RECEIVER_JSON = JSONObject(
         """
         {
             "address": "test_1MBhWS3uv4ynCfQXF3xQjJkzFPukr4K56N",
@@ -235,10 +228,8 @@ internal object SourceFixtures {
         """.trimIndent()
     )
 
-    @JvmField
-    val SOURCE_RECEIVER = SourceReceiver.fromJson(SOURCE_RECEIVER_JSON)!!
+    val SOURCE_RECEIVER = requireNotNull(SourceReceiver.fromJson(SOURCE_RECEIVER_JSON))
 
-    @JvmField
     val SOURCE_OWNER_WITH_NULLS = JSONObject(
         """
         {
@@ -254,7 +245,6 @@ internal object SourceFixtures {
         """.trimIndent()
     )
 
-    @JvmField
     val SOURCE_OWNER_WITHOUT_NULLS = JSONObject(
         """
         {
@@ -284,7 +274,6 @@ internal object SourceFixtures {
         """.trimIndent()
     )
 
-    @JvmField
     internal val SOURCE_CARD_DATA_WITH_APPLE_PAY_JSON = JSONObject(
         """
             {
@@ -300,6 +289,180 @@ internal object SourceFixtures {
                 "three_d_secure": "optional",
                 "tokenization_method": "apple_pay",
                 "dynamic_last4": "4242"
+            }
+            """.trimIndent()
+    )
+
+    internal val SOURCE_WITH_SOURCE_ORDER = requireNotNull(Source.fromJson(JSONObject(
+        """
+        {
+            "id": "src_1FfB6GKmrohBAXC",
+            "object": "source",
+            "amount": 1000,
+            "created": 1573848540,
+            "currency": "eur",
+            "flow": "redirect",
+            "livemode": false,
+            "metadata": {},
+            "source_order": $SOURCE_ORDER_JSON,
+            "statement_descriptor": "WIDGET FACTORY",
+            "status": "pending",
+            "type": "klarna",
+            "usage": "single_use"
+        }
+        """.trimIndent()
+    )))
+
+    internal val CUSTOMER_SOURCE_CARD_JSON = JSONObject(
+        """
+            {
+                "id": "src_19t3xKBZqEXluyI4uz2dxAfQ",
+                "object": "source",
+                "amount": 1000,
+                "client_secret": "src_client_secret_of43INi1HteJwXVe3djAUosN",
+                "code_verification": {
+                    "attempts_remaining": 3,
+                    "status": "pending"
+                },
+                "created": 1488499654,
+                "currency": "usd",
+                "flow": "receiver",
+                "livemode": false,
+                "metadata": {},
+                "owner": {
+                    "verified_phone": "4158675309",
+                    "address": {
+                        "country": "US",
+                        "city": "San Francisco",
+                        "state": "CA",
+                        "postal_code": "94107",
+                        "line2": "#345",
+                        "line1": "123 Market St"
+                    },
+                    "phone": "4158675309",
+                    "name": "Jenny Rosen",
+                    "verified_name": "Jenny Rosen",
+                    "verified_email": "jenny.rosen@example.com",
+                    "verified_address": {
+                        "country": "US",
+                        "city": "San Francisco",
+                        "state": "CA",
+                        "postal_code": "94107",
+                        "line2": "#345",
+                        "line1": "123 Market St"
+                    },
+                    "email": "jenny.rosen@example.com"
+                },
+                "redirect": {
+                    "return_url": "https://google.com",
+                    "url": "examplecompany://redirect-link",
+                    "status": "succeeded"
+                },
+                "receiver": {
+                    "address": "test_1MBhWS3uv4ynCfQXF3xQjJkzFPukr4K56N",
+                    "amount_charged": 0,
+                    "amount_received": 0,
+                    "amount_returned": 0
+                },
+                "status": "pending",
+                "type": "card",
+                "usage": "single_use",
+                "card": {
+                    "address_zip_check": "unchecked",
+                    "tokenization_method": "apple_pay",
+                    "country": "US",
+                    "last4": "4242",
+                    "funding": "credit",
+                    "cvc_check": "unchecked",
+                    "exp_month": 12,
+                    "exp_year": 2050,
+                    "address_line1_check": "unchecked",
+                    "three_d_secure": "optional",
+                    "dynamic_last4": "4242",
+                    "brand": "Visa"
+                }
+            }
+            """.trimIndent()
+    )
+
+    internal val CUSTOMER_SOURCE_CARD = requireNotNull(
+        CustomerSource.fromJson(CUSTOMER_SOURCE_CARD_JSON)
+    )
+
+    internal const val DOGE_COIN = "dogecoin"
+
+    internal val EXAMPLE_JSON_SOURCE_CUSTOM_TYPE = JSONObject(
+        """
+            {
+                "id": "src_19t3xKBZqEXluyI4uz2dxAfQ",
+                "object": "source",
+                "amount": 1000,
+                "client_secret": "src_client_secret_of43INi1HteJwXVe3djAUosN",
+                "code_verification": {
+                    "attempts_remaining": 3,
+                    "status": "pending"
+                },
+                "created": 1488499654,
+                "currency": "usd",
+                "flow": "receiver",
+                "livemode": false,
+                "metadata": {},
+                "owner": {
+                    "verified_phone": "4158675309",
+                    "address": {
+                        "country": "US",
+                        "city": "San Francisco",
+                        "state": "CA",
+                        "postal_code": "94107",
+                        "line2": "#345",
+                        "line1": "123 Market St"
+                    },
+                    "phone": "4158675309",
+                    "name": "Jenny Rosen",
+                    "verified_name": "Jenny Rosen",
+                    "verified_email": "jenny.rosen@example.com",
+                    "verified_address": {
+                        "country": "US",
+                        "city": "San Francisco",
+                        "state": "CA",
+                        "postal_code": "94107",
+                        "line2": "#345",
+                        "line1": "123 Market St"
+                    },
+                    "email": "jenny.rosen@example.com"
+                },
+                "redirect": {
+                    "return_url": "https://google.com",
+                    "url": "examplecompany://redirect-link",
+                    "status": "succeeded"
+                },
+                "receiver": {
+                    "address": "test_1MBhWS3uv4ynCfQXF3xQjJkzFPukr4K56N",
+                    "amount_charged": 0,
+                    "amount_received": 0,
+                    "amount_returned": 0
+                },
+                "status": "pending",
+                "type": "dogecoin",
+                "usage": "single_use",
+                "dogecoin": {
+                    "address": "test_1MBhWS3uv4ynCfQXF3xQjJkzFPukr4K56N",
+                    "amount": 2371000,
+                    "amount_charged": 0,
+                    "amount_received": 0,
+                    "amount_returned": 0,
+                    "uri": "dogecoin:test_1MBhWS3uv4ynCfQXF3xQjJkzFPukr4K56N?amount=0.02371000"
+                }
+            }
+            """.trimIndent()
+    )
+
+    internal val DELETED_CARD_JSON = JSONObject(
+        """
+            {
+                "id": "card_1ELdAlCRMbs6FrXfNbmZEOb7",
+                "object": "card",
+                "deleted": true
             }
             """.trimIndent()
     )

@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## 12.5.0 - 2019-11-21
+* [#1836](https://github.com/stripe/stripe-android/pull/1836) Add support for [statement_descriptor](https://stripe.com/docs/api/sources/object#source_object-statement_descriptor) field to `Source` model via `Source#statementDescriptor`
+* [#1837](https://github.com/stripe/stripe-android/pull/1837) Add support for [source_order](https://stripe.com/docs/api/sources/create#create_source-source_order) param via `SourceOrderParams`
+* [#1839](https://github.com/stripe/stripe-android/pull/1839) Add support for [source_order](https://stripe.com/docs/api/sources/object#source_object-source_order) field to `Source` model via `Source#sourceOrder`
+* [#1842](https://github.com/stripe/stripe-android/pull/1842) Add `PaymentSessionConfig.Builder.setAllowedShippingCountryCodes()`. Used to specify an allowed set of countries when collecting the customer's shipping address via `PaymentSession`.
+    ```kotlin
+    // Example
+    PaymentSessionConfig.Builder()
+        // only allowed US and Canada shipping addresses
+        .setAllowedShippingCountryCodes(setOf("US", "CA"))
+        .build()
+    ```
+* [#1845](https://github.com/stripe/stripe-android/pull/1845) Fix country code validation in `PaymentFlowActivity`'s shipping information screen
+    * Require that the customer submits a country that exists in the autocomplete dropdown
+    * Show error UI when the submitted country fails validation
+* [#1857](https://github.com/stripe/stripe-android/pull/1857) Fix crash related to Kotlin Coroutines
+    * Downgrade `kotlinx-coroutines` from `1.3.2` to `1.3.0`
+    * Add Proguard rules
+
 ## 12.4.0 - 2019-11-13
 * [#1792](https://github.com/stripe/stripe-android/pull/1792) Remove default selection of a Payment Method from `PaymentMethodsActivity`
 * [#1797](https://github.com/stripe/stripe-android/pull/1797) Document `StripeDefaultTheme` style
