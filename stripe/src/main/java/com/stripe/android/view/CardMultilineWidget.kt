@@ -264,7 +264,7 @@ class CardMultilineWidget @JvmOverloads constructor(
                             cardInputListener?.onPostalCodeComplete()
                         }
                     } else {
-                        if (text.length >= 6) {
+                        if (text.length >= 5) {
                             cardInputListener?.onPostalCodeComplete()
                         }
                     }
@@ -328,7 +328,7 @@ class CardMultilineWidget @JvmOverloads constructor(
                     if (shouldUseUSPostalCode) {
                         isPostalCodeMaximalLength(postalCodeString)
                     } else {
-                        postalCodeString != null && postalCodeString.length >= 6
+                        postalCodeString != null && postalCodeString.length >= 5
                     }
             postalCodeEditText.shouldShowError = !postalCodeIsValidOrGone
         } else {
@@ -380,6 +380,7 @@ class CardMultilineWidget @JvmOverloads constructor(
             postalCodeEditText.filters = arrayOf(InputFilter.LengthFilter(7))
             postalCodeEditText.inputType = InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS
         }
+        initFocusChangeListeners()
     }
 
     /**
@@ -579,7 +580,8 @@ class CardMultilineWidget @JvmOverloads constructor(
                 return@OnFocusChangeListener
             }
             if (hasFocus) {
-                postalCodeEditText.setHintDelayed(R.string.zip_helper, COMMON_HINT_DELAY)
+                if (shouldUseUSPostalCode)
+                    postalCodeEditText.setHintDelayed(R.string.zip_helper, COMMON_HINT_DELAY)
                 cardInputListener?.onFocusChange(FOCUS_POSTAL)
             } else {
                 postalCodeEditText.hint = ""
