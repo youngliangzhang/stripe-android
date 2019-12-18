@@ -14,11 +14,12 @@ internal class AddPaymentMethodCardRowView internal constructor(
     R.layout.add_payment_method_card_row,
     R.id.stripe_payment_methods_add_card,
     AddPaymentMethodActivityStarter.Args.Builder()
+        .setBillingAddressFields(args.billingAddressFields)
         .setShouldAttachToCustomer(true)
-        .setShouldRequirePostalCode(args.shouldRequirePostalCode)
         .setIsPaymentSessionActive(args.isPaymentSessionActive)
         .setPaymentMethodType(PaymentMethod.Type.Card)
-        .setAddPaymentMethodFooter(args.addPaymentMethodFooter)
+        .setAddPaymentMethodFooter(args.addPaymentMethodFooterLayoutId)
         .setPaymentConfiguration(args.paymentConfiguration)
+        .setWindowFlags(args.windowFlags)
         .build()
 )

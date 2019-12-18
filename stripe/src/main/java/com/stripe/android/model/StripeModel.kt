@@ -1,21 +1,12 @@
 package com.stripe.android.model
 
-import org.json.JSONArray
+import android.os.Parcelable
 
 /**
  * Model for a Stripe API object.
  */
-abstract class StripeModel {
+interface StripeModel : Parcelable {
+    override fun hashCode(): Int
 
-    abstract override fun hashCode(): Int
-
-    abstract override fun equals(other: Any?): Boolean
-
-    internal companion object {
-        internal fun jsonArrayToList(jsonArray: JSONArray?): List<String> {
-            return jsonArray?.let {
-                (0 until jsonArray.length()).map { jsonArray.getString(it) }
-            } ?: emptyList()
-        }
-    }
+    override fun equals(other: Any?): Boolean
 }

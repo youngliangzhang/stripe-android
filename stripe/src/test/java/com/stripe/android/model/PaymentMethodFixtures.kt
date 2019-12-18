@@ -1,30 +1,29 @@
 package com.stripe.android.model
 
+import com.stripe.android.model.parsers.PaymentMethodJsonParser
 import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 import org.json.JSONObject
 
 internal object PaymentMethodFixtures {
-    @JvmField
-    val CARD = PaymentMethod.Card.Builder()
-        .setBrand(PaymentMethod.Card.Brand.VISA)
-        .setChecks(PaymentMethod.Card.Checks.create(
+    val CARD = PaymentMethod.Card(
+        brand = PaymentMethod.Card.Brand.VISA,
+        checks = PaymentMethod.Card.Checks(
             addressLine1Check = "unchecked",
             addressPostalCodeCheck = null,
             cvcCheck = "unchecked"
-        ))
-        .setCountry("US")
-        .setExpiryMonth(8)
-        .setExpiryYear(2022)
-        .setFunding("credit")
-        .setLast4("4242")
-        .setThreeDSecureUsage(PaymentMethod.Card.ThreeDSecureUsage.create(
+        ),
+        country = "US",
+        expiryMonth = 8,
+        expiryYear = 2022,
+        funding = "credit",
+        last4 = "4242",
+        threeDSecureUsage = PaymentMethod.Card.ThreeDSecureUsage(
             isSupported = true
-        ))
-        .setWallet(null)
-        .build()
+        ),
+        wallet = null
+    )
 
-    @JvmField
     val BILLING_DETAILS = PaymentMethod.BillingDetails.Builder()
         .setAddress(Address.Builder()
             .setLine1("510 Townsend St")
@@ -38,7 +37,6 @@ internal object PaymentMethodFixtures {
         .setPhone("123-456-7890")
         .build()
 
-    @JvmField
     val CARD_PAYMENT_METHOD = PaymentMethod.Builder()
         .setId("pm_123456789")
         .setCreated(1550757934255L)
@@ -50,21 +48,19 @@ internal object PaymentMethodFixtures {
         .setMetadata(mapOf("order_id" to "123456789"))
         .build()
 
-    @JvmField
     val FPX_PAYMENT_METHOD = PaymentMethod.Builder()
         .setId("pm_1F5GlnH8dsfnfKo3gtixzcq0")
         .setCreated(1565290527L)
         .setLiveMode(true)
         .setType("fpx")
         .setBillingDetails(BILLING_DETAILS)
-        .setFpx(PaymentMethod.Fpx.create(
+        .setFpx(PaymentMethod.Fpx(
             "hsbc",
             "individual"
         ))
         .build()
 
-    @JvmField
-    val SEPA_DEBIT_PAYMENT_METHOD = PaymentMethod.fromJson(JSONObject(
+    val SEPA_DEBIT_PAYMENT_METHOD = PaymentMethodJsonParser().parse(JSONObject(
         """
         {
           "id": "pm_1FSQaJCR",
@@ -96,40 +92,38 @@ internal object PaymentMethodFixtures {
           "type": "sepa_debit"
         }
         """.trimIndent()
-    ))!!
+    ))
 
-    @JvmField
     val CARD_PAYMENT_METHODS = listOf(
         PaymentMethod.Builder()
             .setType("card")
             .setCreated(1000L)
             .setId("pm_1000")
-            .setCard(PaymentMethod.Card.Builder()
-                .setBrand("visa")
-                .setLast4("4242")
-                .build())
+            .setCard(PaymentMethod.Card(
+                brand = "visa",
+                last4 = "4242"
+            ))
             .build(),
         PaymentMethod.Builder()
             .setType("card")
             .setCreated(2000L)
             .setId("pm_2000")
-            .setCard(PaymentMethod.Card.Builder()
-                .setBrand("visa")
-                .setLast4("3063")
-                .build())
+            .setCard(PaymentMethod.Card(
+                brand = "visa",
+                last4 = "3063"
+            ))
             .build(),
         PaymentMethod.Builder()
             .setType("card")
             .setCreated(3000L)
             .setId("pm_3000")
-            .setCard(PaymentMethod.Card.Builder()
-                .setBrand("visa")
-                .setLast4("3220")
-                .build())
+            .setCard(PaymentMethod.Card(
+                brand = "visa",
+                last4 = "3220"
+            ))
             .build()
     )
 
-    @JvmStatic
     @JvmOverloads
     fun createCard(createdOrigin: Long? = null): PaymentMethod {
         val id = "pm_" + UUID.randomUUID().toString()
@@ -143,14 +137,17 @@ internal object PaymentMethodFixtures {
                 )
             )
             .setId(id)
-            .setCard(PaymentMethod.Card.Builder()
-                .setBrand("visa")
-                .setLast4(ThreadLocalRandom.current().nextInt(1000, 9999).toString())
-                .build())
+            .setCard(PaymentMethod.Card(
+                brand = "visa",
+                last4 = createLast4()
+            ))
             .build()
     }
 
-    @JvmStatic
+    private fun createLast4(): String {
+        return ThreadLocalRandom.current().nextInt(1000, 9999).toString()
+    }
+
     fun createCards(size: Int): List<PaymentMethod> {
         var origin = 1L
         return (0 until size).map {

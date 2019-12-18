@@ -1,8 +1,8 @@
 package com.stripe.android.model
 
-import com.stripe.android.model.SetupIntentFixtures.SI_NEXT_ACTION_REDIRECT_JSON
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -14,15 +14,15 @@ class SetupIntentTest {
 
     @Test
     fun parseIdFromClientSecret_correctIdParsed() {
-        val id = SetupIntent.parseIdFromClientSecret(
-            "seti_1Eq5kyGMT9dGPIDGxiSp4cce_secret_FKlHb3yTI0YZWe4iqghS8ZXqwwMoMmy")
+        val id = SetupIntent.ClientSecret(
+            "seti_1Eq5kyGMT9dGPIDGxiSp4cce_secret_FKlHb3yTI0YZWe4iqghS8ZXqwwMoMmy"
+        ).setupIntentId
         assertEquals("seti_1Eq5kyGMT9dGPIDGxiSp4cce", id)
     }
 
     @Test
     fun fromJsonStringWithNextAction_createsSetupIntentWithNextAction() {
-        val setupIntent = SetupIntent.fromString(SI_NEXT_ACTION_REDIRECT_JSON)
-        assertNotNull(setupIntent)
+        val setupIntent = SetupIntentFixtures.SI_NEXT_ACTION_REDIRECT
         assertEquals("seti_1EqTSZGMT9dGPIDGVzCUs6dV", setupIntent.id)
         assertEquals("seti_1EqTSZGMT9dGPIDGVzCUs6dV_secret_FL9mS9ILygVyGEOSmVNqHT83rxkqy0Y",
             setupIntent.clientSecret)
@@ -68,5 +68,24 @@ class SetupIntentTest {
             SetupIntentFixtures.CANCELLED.status)
         assertEquals(SetupIntent.CancellationReason.Abandoned,
             SetupIntentFixtures.CANCELLED.cancellationReason)
+    }
+
+    @Test
+    fun clientSecret_withInvalidKeys_throwsException() {
+        assertFailsWith<IllegalArgumentException> {
+            SetupIntent.ClientSecret("seti_12345")
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            SetupIntent.ClientSecret("seti_12345_secret_")
+        }
+    }
+
+    @Test
+    fun clientSecret_withValidKeys_throwsException() {
+        assertEquals(
+            "seti_a1b2c3_secret_x7y8z9",
+            SetupIntent.ClientSecret("seti_a1b2c3_secret_x7y8z9").value
+        )
     }
 }

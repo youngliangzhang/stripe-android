@@ -1,14 +1,14 @@
 package com.stripe.android.model
 
-import com.stripe.android.model.StripeJsonUtils.optString
-import org.json.JSONObject
+import kotlinx.android.parcel.Parcelize
 
 /**
  * Model of the "data" object inside a [Customer] "source" object.
  */
-data class CustomerSource private constructor(
+@Parcelize
+data class CustomerSource internal constructor(
     private val stripePaymentSource: StripePaymentSource
-) : StripeModel(), StripePaymentSource {
+) : StripeModel, StripePaymentSource {
 
     override val id: String?
         get() = stripePaymentSource.id
@@ -41,27 +41,5 @@ data class CustomerSource private constructor(
         return if (stripePaymentSource is Card) {
             stripePaymentSource
         } else null
-    }
-
-    companion object {
-        @JvmStatic
-        fun fromJson(jsonObject: JSONObject?): CustomerSource? {
-            if (jsonObject == null) {
-                return null
-            }
-
-            val sourceObject: StripePaymentSource? =
-                when (optString(jsonObject, "object")) {
-                    Card.VALUE_CARD -> Card.fromJson(jsonObject)
-                    Source.VALUE_SOURCE -> Source.fromJson(jsonObject)
-                    else -> null
-                }
-
-            return if (sourceObject == null) {
-                null
-            } else {
-                CustomerSource(sourceObject)
-            }
-        }
     }
 }

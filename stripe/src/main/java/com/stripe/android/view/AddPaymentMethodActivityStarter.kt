@@ -37,6 +37,7 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
 
     @Parcelize
     data class Args internal constructor(
+        internal val billingAddressFields: BillingAddressFields,
         internal val shouldAttachToCustomer: Boolean,
         internal val shouldRequirePostalCode: Boolean,
         internal val shouldUseUSPostalCode: Boolean,
@@ -44,10 +45,12 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
         internal val shouldInitCustomerSessionTokens: Boolean,
         internal val paymentMethodType: PaymentMethod.Type,
         internal val paymentConfiguration: PaymentConfiguration?,
-        @LayoutRes internal val addPaymentMethodFooter: Int
+        @LayoutRes internal val addPaymentMethodFooterLayoutId: Int,
+        internal val windowFlags: Int? = null
     ) : ActivityStarter.Args {
 
         class Builder : ObjectBuilder<Args> {
+            private var billingAddressFields: BillingAddressFields = BillingAddressFields.None
             private var shouldAttachToCustomer: Boolean = false
             private var shouldRequirePostalCode: Boolean = false
             private var shouldUseUSPostalCode: Boolean = true
@@ -56,24 +59,37 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
             private var paymentMethodType: PaymentMethod.Type? = PaymentMethod.Type.Card
             private var paymentConfiguration: PaymentConfiguration? = null
             @LayoutRes
-            private var addPaymentMethodFooter: Int = 0
+            private var addPaymentMethodFooterLayoutId: Int = 0
+            private var windowFlags: Int? = null
 
             /**
              * If true, the created Payment Method will be attached to the current Customer
              * using an already-initialized [com.stripe.android.CustomerSession].
              */
-            fun setShouldAttachToCustomer(shouldAttachToCustomer: Boolean): Builder {
+            fun setShouldAttachToCustomer(shouldAttachToCustomer: Boolean): Builder = apply {
                 this.shouldAttachToCustomer = shouldAttachToCustomer
-                return this
+            }
+
+            /**
+             * @param billingAddressFields the billing address fields to require on [AddPaymentMethodActivity]
+             */
+            fun setBillingAddressFields(
+                billingAddressFields: BillingAddressFields
+            ): Builder = apply {
+                this.billingAddressFields = billingAddressFields
             }
 
             /**
              * If true, a postal code field will be shown and validated.
              * Currently, only US ZIP Codes are supported.
              */
-            fun setShouldRequirePostalCode(shouldRequirePostalCode: Boolean): Builder {
+            @Deprecated("Use setBillingAddressFields()",
+                ReplaceWith("setBillingAddressFields(BillingAddressFields.PostalCode"))
+            fun setShouldRequirePostalCode(shouldRequirePostalCode: Boolean): Builder = apply {
                 this.shouldRequirePostalCode = shouldRequirePostalCode
-                return this
+                if (shouldRequirePostalCode) {
+                    this.billingAddressFields = BillingAddressFields.PostalCode
+                }
             }
 
             fun setShouldUseUSPostalCode(shouldUseUSPostalCode: Boolean): Builder {
@@ -87,40 +103,53 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
              * If unspecified, defaults to [PaymentMethod.Type.Card].
              * Currently only [PaymentMethod.Type.Card] and [PaymentMethod.Type.Fpx] are supported.
              */
-            fun setPaymentMethodType(paymentMethodType: PaymentMethod.Type): Builder {
+            fun setPaymentMethodType(paymentMethodType: PaymentMethod.Type): Builder = apply {
                 this.paymentMethodType = paymentMethodType
-                return this
+            }
+
+            /**
+             * @param addPaymentMethodFooterLayoutId optional layout id that will be inflated and
+             * displayed beneath the payment details collection form on [AddPaymentMethodActivity]
+             */
+            fun setAddPaymentMethodFooter(
+                @LayoutRes addPaymentMethodFooterLayoutId: Int
+            ): Builder = apply {
+                this.addPaymentMethodFooterLayoutId = addPaymentMethodFooterLayoutId
+            }
+
+            /**
+             * @param windowFlags optional flags to set on the `Window` object of Stripe Activities
+             *
+             * See [WindowManager.LayoutParams](https://developer.android.com/reference/android/view/WindowManager.LayoutParams)
+             */
+            fun setWindowFlags(windowFlags: Int?): Builder = apply {
+                this.windowFlags = windowFlags
             }
 
             @JvmSynthetic
-            internal fun setIsPaymentSessionActive(isPaymentSessionActive: Boolean): Builder {
+            internal fun setIsPaymentSessionActive(
+                isPaymentSessionActive: Boolean
+            ): Builder = apply {
                 this.isPaymentSessionActive = isPaymentSessionActive
-                return this
             }
 
             @JvmSynthetic
             internal fun setShouldInitCustomerSessionTokens(
                 shouldInitCustomerSessionTokens: Boolean
-            ): Builder {
+            ): Builder = apply {
                 this.shouldInitCustomerSessionTokens = shouldInitCustomerSessionTokens
-                return this
             }
 
             @JvmSynthetic
             internal fun setPaymentConfiguration(
                 paymentConfiguration: PaymentConfiguration?
-            ): Builder {
+            ): Builder = apply {
                 this.paymentConfiguration = paymentConfiguration
-                return this
-            }
-
-            fun setAddPaymentMethodFooter(@LayoutRes addPaymentMethodFooter: Int): Builder {
-                this.addPaymentMethodFooter = addPaymentMethodFooter
-                return this
             }
 
             override fun build(): Args {
                 return Args(
+                    billingAddressFields = billingAddressFields,
                     shouldAttachToCustomer = shouldAttachToCustomer,
                     shouldRequirePostalCode = shouldRequirePostalCode,
                     shouldUseUSPostalCode = shouldUseUSPostalCode,
@@ -128,7 +157,8 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
                     shouldInitCustomerSessionTokens = shouldInitCustomerSessionTokens,
                     paymentMethodType = paymentMethodType ?: PaymentMethod.Type.Card,
                     paymentConfiguration = paymentConfiguration,
-                    addPaymentMethodFooter = addPaymentMethodFooter
+                    addPaymentMethodFooterLayoutId = addPaymentMethodFooterLayoutId,
+                    windowFlags = windowFlags
                 )
             }
         }

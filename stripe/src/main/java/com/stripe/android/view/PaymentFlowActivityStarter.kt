@@ -22,41 +22,56 @@ class PaymentFlowActivityStarter :
     @Parcelize
     data class Args internal constructor(
         internal val paymentSessionConfig: PaymentSessionConfig,
-        internal val paymentSessionData: PaymentSessionData?,
-        internal val isPaymentSessionActive: Boolean
+        internal val paymentSessionData: PaymentSessionData,
+        internal val isPaymentSessionActive: Boolean,
+        internal val windowFlags: Int? = null
     ) : ActivityStarter.Args {
         class Builder : ObjectBuilder<Args> {
             private var paymentSessionConfig: PaymentSessionConfig? = null
             private var paymentSessionData: PaymentSessionData? = null
             private var isPaymentSessionActive = false
+            private var windowFlags: Int? = null
 
-            fun setPaymentSessionConfig(paymentSessionConfig: PaymentSessionConfig?): Builder {
+            fun setPaymentSessionConfig(
+                paymentSessionConfig: PaymentSessionConfig?
+            ): Builder = apply {
                 this.paymentSessionConfig = paymentSessionConfig
-                return this
             }
 
-            fun setPaymentSessionData(paymentSessionData: PaymentSessionData?): Builder {
+            fun setPaymentSessionData(paymentSessionData: PaymentSessionData?): Builder = apply {
                 this.paymentSessionData = paymentSessionData
-                return this
             }
 
-            fun setIsPaymentSessionActive(isPaymentSessionActive: Boolean): Builder {
+            fun setIsPaymentSessionActive(isPaymentSessionActive: Boolean): Builder = apply {
                 this.isPaymentSessionActive = isPaymentSessionActive
-                return this
+            }
+
+            /**
+             * @param windowFlags optional flags to set on the `Window` object of Stripe Activities
+             *
+             * See [WindowManager.LayoutParams](https://developer.android.com/reference/android/view/WindowManager.LayoutParams)
+             */
+            fun setWindowFlags(windowFlags: Int?): Builder = apply {
+                this.windowFlags = windowFlags
             }
 
             override fun build(): Args {
                 return Args(
                     paymentSessionConfig = paymentSessionConfig
                         ?: PaymentSessionConfig.Builder().build(),
-                    paymentSessionData = paymentSessionData,
-                    isPaymentSessionActive = isPaymentSessionActive
+                    paymentSessionData = requireNotNull(paymentSessionData) {
+                        "PaymentFlowActivity launched without PaymentSessionData"
+                    },
+                    isPaymentSessionActive = isPaymentSessionActive,
+                    windowFlags = windowFlags
                 )
             }
         }
 
         companion object {
-            internal val DEFAULT = Builder().build()
+            internal val DEFAULT = Builder()
+                .setPaymentSessionData(PaymentSessionData())
+                .build()
 
             @JvmStatic
             fun create(intent: Intent): Args {

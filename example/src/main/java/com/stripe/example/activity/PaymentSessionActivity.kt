@@ -1,14 +1,12 @@
 package com.stripe.example.activity
 
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Bundle
 import android.view.View
+import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.google.android.material.snackbar.Snackbar
 import com.stripe.android.CustomerSession
 import com.stripe.android.PaymentSession
 import com.stripe.android.PaymentSessionConfig
@@ -19,19 +17,12 @@ import com.stripe.android.model.Customer
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.ShippingInformation
 import com.stripe.android.model.ShippingMethod
-import com.stripe.android.view.PaymentFlowExtras.EVENT_SHIPPING_INFO_PROCESSED
-import com.stripe.android.view.PaymentFlowExtras.EVENT_SHIPPING_INFO_SUBMITTED
-import com.stripe.android.view.PaymentFlowExtras.EXTRA_DEFAULT_SHIPPING_METHOD
-import com.stripe.android.view.PaymentFlowExtras.EXTRA_IS_SHIPPING_INFO_VALID
-import com.stripe.android.view.PaymentFlowExtras.EXTRA_SHIPPING_INFO_DATA
-import com.stripe.android.view.PaymentFlowExtras.EXTRA_VALID_SHIPPING_METHODS
+import com.stripe.android.view.BillingAddressFields
 import com.stripe.android.view.PaymentUtils
 import com.stripe.android.view.ShippingInfoWidget
 import com.stripe.example.R
-import com.stripe.example.controller.ErrorDialogHandler
 import com.stripe.example.service.ExampleEphemeralKeyProvider
 import kotlinx.android.synthetic.main.activity_payment_session.*
-import java.util.ArrayList
 import java.util.Currency
 import java.util.Locale
 
@@ -41,10 +32,10 @@ import java.util.Locale
  */
 class PaymentSessionActivity : AppCompatActivity() {
 
-    private lateinit var broadcastReceiver: BroadcastReceiver
-    private lateinit var errorDialogHandler: ErrorDialogHandler
     private lateinit var paymentSession: PaymentSession
-    private lateinit var notSelectedText: String
+    private val notSelectedText: String by lazy {
+        getString(R.string.not_selected)
+    }
 
     private var paymentSessionData: PaymentSessionData? = null
 
@@ -52,39 +43,12 @@ class PaymentSessionActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_payment_session)
 
-        notSelectedText = getString(R.string.not_selected)
-
         progress_bar.visibility = View.VISIBLE
-        errorDialogHandler = ErrorDialogHandler(this)
 
         paymentSession = createPaymentSession(savedInstanceState)
 
-        val localBroadcastManager = LocalBroadcastManager.getInstance(this)
-        broadcastReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                val shippingInformation = intent
-                    .getParcelableExtra<ShippingInformation>(EXTRA_SHIPPING_INFO_DATA)
-                val shippingInfoProcessedIntent = Intent(EVENT_SHIPPING_INFO_PROCESSED)
-                if (!isValidShippingInfo(shippingInformation)) {
-                    shippingInfoProcessedIntent.putExtra(EXTRA_IS_SHIPPING_INFO_VALID, false)
-                } else {
-                    val shippingMethods = createSampleShippingMethods()
-                    shippingInfoProcessedIntent
-                        .putExtra(EXTRA_IS_SHIPPING_INFO_VALID, true)
-                        .putParcelableArrayListExtra(EXTRA_VALID_SHIPPING_METHODS, shippingMethods)
-                        .putExtra(EXTRA_DEFAULT_SHIPPING_METHOD, shippingMethods.last())
-                }
-                localBroadcastManager.sendBroadcast(shippingInfoProcessedIntent)
-            }
-
-            private fun isValidShippingInfo(shippingInfo: ShippingInformation?): Boolean {
-                return shippingInfo?.address?.country == Locale.US.country
-            }
-        }
-        localBroadcastManager.registerReceiver(broadcastReceiver,
-            IntentFilter(EVENT_SHIPPING_INFO_SUBMITTED))
         btn_select_payment_method.setOnClickListener {
-            paymentSession.presentPaymentMethodSelection(true)
+            paymentSession.presentPaymentMethodSelection()
         }
         btn_start_payment_flow.setOnClickListener {
             paymentSession.presentShippingFlow()
@@ -94,7 +58,7 @@ class PaymentSessionActivity : AppCompatActivity() {
     private fun createCustomerSession(): CustomerSession {
         CustomerSession.initCustomerSession(
             this,
-            ExampleEphemeralKeyProvider(),
+            ExampleEphemeralKeyProvider(this),
             false
         )
         return CustomerSession.getInstance()
@@ -122,6 +86,10 @@ class PaymentSessionActivity : AppCompatActivity() {
                 // Defaults to `PaymentMethod.Type.Card`
                 .setPaymentMethodTypes(listOf(PaymentMethod.Type.Card))
                 .setAllowedShippingCountryCodes(setOf("US", "CA"))
+                .setShippingInformationValidator(ShippingInformationValidator())
+                .setShippingMethodsFactory(ShippingMethodsFactory())
+                .setWindowFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                .setBillingAddressFields(BillingAddressFields.Full)
                 .build(),
             savedInstanceState = savedInstanceState,
             shouldPrefetchCustomer = shouldPrefetchCustomer
@@ -174,24 +142,14 @@ class PaymentSessionActivity : AppCompatActivity() {
         }
     }
 
-    private fun createSampleShippingMethods(): ArrayList<ShippingMethod> {
-        return arrayListOf(
-            ShippingMethod("UPS Ground", "ups-ground",
-                0, "USD", "Arrives in 3-5 days"),
-            ShippingMethod("FedEx", "fedex",
-                599, "USD", "Arrives tomorrow")
-        )
-    }
-
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         paymentSession.handlePaymentData(requestCode, resultCode, data ?: Intent())
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         paymentSession.onDestroy()
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(broadcastReceiver)
+        super.onDestroy()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -239,12 +197,37 @@ class PaymentSessionActivity : AppCompatActivity() {
         }
     }
 
+    private class ShippingInformationValidator : PaymentSessionConfig.ShippingInformationValidator {
+        override fun isValid(shippingInformation: ShippingInformation): Boolean {
+            return shippingInformation.address?.country == Locale.US.country
+        }
+
+        override fun getErrorMessage(shippingInformation: ShippingInformation): String {
+            return "The country must be US."
+        }
+    }
+
+    private class ShippingMethodsFactory : PaymentSessionConfig.ShippingMethodsFactory {
+        override fun create(shippingInformation: ShippingInformation): List<ShippingMethod> {
+            return SHIPPING_METHODS
+        }
+    }
+
+    private fun showError(errorMessage: String) {
+        Snackbar.make(coordinator, errorMessage, Snackbar.LENGTH_LONG)
+            .show()
+    }
+
     private class PaymentSessionListenerImpl internal constructor(
         activity: PaymentSessionActivity,
         private val customerSession: CustomerSession
     ) : PaymentSession.ActivityPaymentSessionListener<PaymentSessionActivity>(activity) {
 
         override fun onCommunicatingStateChanged(isCommunicating: Boolean) {
+            if (isCommunicating) {
+                BackgroundTaskTracker.onStart()
+            }
+
             listenerActivity?.progress_bar?.visibility = if (isCommunicating) {
                 View.VISIBLE
             } else {
@@ -253,10 +236,12 @@ class PaymentSessionActivity : AppCompatActivity() {
         }
 
         override fun onError(errorCode: Int, errorMessage: String) {
-            listenerActivity?.errorDialogHandler?.show(errorMessage)
+            BackgroundTaskTracker.onStop()
+            listenerActivity?.showError(errorMessage)
         }
 
         override fun onPaymentSessionDataChanged(data: PaymentSessionData) {
+            BackgroundTaskTracker.onStop()
             listenerActivity?.onPaymentSessionDataChanged(customerSession, data)
         }
     }
@@ -265,11 +250,17 @@ class PaymentSessionActivity : AppCompatActivity() {
         activity: PaymentSessionActivity
     ) : CustomerSession.ActivityCustomerRetrievalListener<PaymentSessionActivity>(activity) {
 
+        init {
+            BackgroundTaskTracker.onStart()
+        }
+
         override fun onCustomerRetrieved(customer: Customer) {
+            BackgroundTaskTracker.onStop()
             activity?.onCustomerRetrieved()
         }
 
-        override fun onError(httpCode: Int, errorMessage: String, stripeError: StripeError?) {
+        override fun onError(errorCode: Int, errorMessage: String, stripeError: StripeError?) {
+            BackgroundTaskTracker.onStop()
             activity?.progress_bar?.visibility = View.INVISIBLE
         }
     }
@@ -286,6 +277,13 @@ class PaymentSessionActivity : AppCompatActivity() {
                 .build(),
             "Fake Name",
             "(555) 555-5555"
+        )
+
+        private val SHIPPING_METHODS = listOf(
+            ShippingMethod("UPS Ground", "ups-ground",
+                0, "USD", "Arrives in 3-5 days"),
+            ShippingMethod("FedEx", "fedex",
+                599, "USD", "Arrives tomorrow")
         )
     }
 }

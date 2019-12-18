@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProviders
@@ -13,7 +12,6 @@ import com.google.android.material.snackbar.Snackbar
 import com.stripe.android.CustomerSession
 import com.stripe.android.PaymentSession.Companion.TOKEN_PAYMENT_SESSION
 import com.stripe.android.R
-import com.stripe.android.exception.StripeException
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.view.i18n.TranslatorManager
 import kotlinx.android.synthetic.main.activity_payment_methods.*
@@ -35,6 +33,10 @@ class PaymentMethodsActivity : AppCompatActivity() {
     private lateinit var customerSession: CustomerSession
     private lateinit var cardDisplayTextFactory: CardDisplayTextFactory
 
+    private val alertDisplayer: AlertDisplayer by lazy {
+        AlertDisplayer.DefaultAlertDisplayer(this)
+    }
+
     private lateinit var viewModel: PaymentMethodsViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,6 +51,10 @@ class PaymentMethodsActivity : AppCompatActivity() {
             PaymentMethodsViewModel.Factory(customerSession, args.initialPaymentMethodId)
         )[PaymentMethodsViewModel::class.java]
 
+        args.windowFlags?.let {
+            window.addFlags(it)
+        }
+
         startedFromPaymentSession = args.isPaymentSessionActive
         cardDisplayTextFactory = CardDisplayTextFactory.create(this)
 
@@ -57,22 +63,6 @@ class PaymentMethodsActivity : AppCompatActivity() {
         setSupportActionBar(payment_methods_toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setDisplayShowHomeEnabled(true)
-
-        viewModel.paymentMethods.observe(this, Observer {
-            when (it.status) {
-                PaymentMethodsViewModel.Result.Status.SUCCESS -> {
-                    val paymentMethods = it.data as List<PaymentMethod>
-                    adapter.setPaymentMethods(paymentMethods)
-                }
-                PaymentMethodsViewModel.Result.Status.ERROR -> {
-                    val exception = it.data as StripeException
-                    val displayedError = TranslatorManager.getErrorMessageTranslator()
-                        .translate(exception.statusCode, exception.message, exception.stripeError)
-                    showError(displayedError)
-                }
-            }
-            setCommunicatingProgress(false)
-        })
 
         fetchCustomerPaymentMethods()
 
@@ -84,9 +74,9 @@ class PaymentMethodsActivity : AppCompatActivity() {
         args: PaymentMethodsActivityStarter.Args
     ) {
         adapter = PaymentMethodsAdapter(
-            viewModel.selectedPaymentMethodId,
             args,
-            args.paymentMethodTypes
+            args.paymentMethodTypes,
+            viewModel.selectedPaymentMethodId
         )
 
         adapter.listener = object : PaymentMethodsAdapter.Listener {
@@ -154,7 +144,7 @@ class PaymentMethodsActivity : AppCompatActivity() {
 
         if (snackbarText != null) {
             Snackbar.make(
-                payment_methods_coordinator,
+                coordinator,
                 snackbarText,
                 Snackbar.LENGTH_SHORT
             ).show()
@@ -167,7 +157,20 @@ class PaymentMethodsActivity : AppCompatActivity() {
 
     private fun fetchCustomerPaymentMethods() {
         setCommunicatingProgress(true)
-        viewModel.loadPaymentMethods()
+        viewModel.getPaymentMethods().observe(this, Observer {
+            when (it) {
+                is PaymentMethodsViewModel.Result.Success -> {
+                    adapter.setPaymentMethods(it.paymentMethods)
+                }
+                is PaymentMethodsViewModel.Result.Error -> {
+                    val exception = it.exception
+                    val displayedError = TranslatorManager.getErrorMessageTranslator()
+                        .translate(exception.statusCode, exception.message, exception.stripeError)
+                    alertDisplayer.show(displayedError)
+                }
+            }
+            setCommunicatingProgress(false)
+        })
     }
 
     private fun initLoggingTokens() {
@@ -199,17 +202,6 @@ class PaymentMethodsActivity : AppCompatActivity() {
         )
 
         finish()
-    }
-
-    private fun showError(error: String) {
-        AlertDialog.Builder(this, R.style.AlertDialogStyle)
-            .setMessage(error)
-            .setCancelable(true)
-            .setPositiveButton(android.R.string.ok) { dialogInterface, _ ->
-                dialogInterface.dismiss()
-            }
-            .create()
-            .show()
     }
 
     override fun onDestroy() {

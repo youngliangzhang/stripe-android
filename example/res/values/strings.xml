@@ -7,34 +7,28 @@
     <string name="addThreeDSecureCardSync">Add Source Rx</string>
     <string name="paymentMethods">Payment Methods</string>
 
-    <string name="endingIn">Card ending in </string>
-    <string name="progressMessage">Creating Token&#8230;</string>
-    <string name="validationErrors">Validation Errors</string>
-
     <string name="create_card_token">Create a Card Token</string>
     <string name="create_card_payment_method">Create a Card Payment Method</string>
     <string name="create_card_source">Create a Card Source</string>
 
-    <string name="create_source">Creating source&#8230;</string>
     <string name="customer_payment_data_example">Customer Payment Selection</string>
     <string name="launch_customer_session">Customer Session</string>
     <string name="launch_pay_with_google">Pay with Google</string>
     <string name="launch_payment_session">Payment Session</string>
     <string name="launch_payment_session_from_fragment">Fragment Examples</string>
     <string name="create_with_rxjava">Create with RxJava</string>
-    <string name="create_asynctask">Create Token with AsyncTask</string>
-    <string name="create_rxjava">Create Token with RxJava</string>
+    <string name="create_token">Create Token</string>
     <string name="launch_create_pm_sepa_debit">Create SEPA Debit Payment Method</string>
     <string name="fpx_payment_example">FPX Payment Example</string>
+    <string name="klarna_source_example">Klarna Source Example</string>
 
     <string name="select_add_card">Select or add card</string>
     <string name="selected_card">Selected card:</string>
     <string name="updatedSources">Source results</string>
+    <string name="invalid_card_details">Card details are invalid</string>
 
     <string name="payment_session_select_payment">Select Payment Method</string>
     <string name="payment_session_select_shipping">Set Shipping Information</string>
-    <string name="payment_session_data">Payment Session Data</string>
-    <string name="ok">OK</string>
     <string name="add_payment_method_footer">Please read and review our <a href="https://stripe.com/privacy">privacy policy</a>.</string>
 
     <string name="label_source_type">Type</string>
@@ -68,4 +62,6 @@
 
     <string name="ready_to_charge">Ready to charge?</string>
     <string name="not_selected">Not selected</string>
+
+    <string name="create_klarna_source">Create Klarna Source</string>
 </resources>

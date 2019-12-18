@@ -2,6 +2,7 @@ package com.stripe.android.view
 
 import android.content.Context
 import android.os.Build
+import android.text.Editable
 import android.text.InputFilter
 import android.text.InputType
 import android.text.method.DigitsKeyListener
@@ -17,6 +18,35 @@ class CvcEditText @JvmOverloads constructor(
     defStyleAttr: Int = androidx.appcompat.R.attr.editTextStyle
 ) : StripeEditText(context, attrs, defStyleAttr) {
 
+    /**
+     * @return the inputted CVC value if valid; otherwise, null
+     */
+    val cvcValue: String?
+        get() {
+            return rawCvcValue.takeIf { isValid }
+        }
+
+    private val rawCvcValue: String
+        get() {
+            return text.toString().trim()
+        }
+
+    private var isAmex: Boolean = false
+
+    private val isValid: Boolean
+        get() {
+            val cvcLength = rawCvcValue.length
+            return if (isAmex && cvcLength == Card.CVC_LENGTH_AMERICAN_EXPRESS) {
+                true
+            } else {
+                cvcLength == Card.CVC_LENGTH_COMMON
+            }
+        }
+
+    // invoked when a valid CVC has been entered
+    @JvmSynthetic
+    internal var completionCallback: () -> Unit = {}
+
     init {
         setHint(R.string.cvc_number_hint)
         maxLines = 1
@@ -28,6 +58,14 @@ class CvcEditText @JvmOverloads constructor(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             setAutofillHints(View.AUTOFILL_HINT_CREDIT_CARD_SECURITY_CODE)
         }
+
+        addTextChangedListener(object : StripeTextWatcher() {
+            override fun afterTextChanged(s: Editable?) {
+                if (isValid) {
+                    completionCallback()
+                }
+            }
+        })
     }
 
     /**
@@ -42,7 +80,7 @@ class CvcEditText @JvmOverloads constructor(
         customHintText: String? = null,
         textInputLayout: TextInputLayout? = null
     ) {
-        val isAmex = Card.CardBrand.AMERICAN_EXPRESS == brand
+        isAmex = Card.CardBrand.AMERICAN_EXPRESS == brand
         filters = if (isAmex) {
             INPUT_FILTER_AMEX
         } else {

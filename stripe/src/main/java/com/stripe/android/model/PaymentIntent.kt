@@ -1,12 +1,11 @@
 package com.stripe.android.model
 
 import android.net.Uri
-import com.stripe.android.model.StripeJsonUtils.optBoolean
-import com.stripe.android.model.StripeJsonUtils.optCurrency
-import com.stripe.android.model.StripeJsonUtils.optLong
-import com.stripe.android.model.StripeJsonUtils.optMap
-import com.stripe.android.model.StripeJsonUtils.optString
-import org.json.JSONException
+import com.stripe.android.model.parsers.PaymentIntentJsonParser
+import java.util.regex.Pattern
+import kotlinx.android.parcel.IgnoredOnParcel
+import kotlinx.android.parcel.Parcelize
+import kotlinx.android.parcel.RawValue
 import org.json.JSONObject
 
 /**
@@ -15,6 +14,7 @@ import org.json.JSONObject
  * - [Payment Intents Overview](https://stripe.com/docs/payments/payment-intents)
  * - [PaymentIntents API](https://stripe.com/docs/api/payment_intents)
  */
+@Parcelize
 data class PaymentIntent internal constructor(
     /**
      * @return Unique identifier for the object.
@@ -103,7 +103,7 @@ data class PaymentIntent internal constructor(
      * @return If present, this property tells you what actions you need to take in order for your
      * customer to fulfill a payment using the provided source.
      */
-    val nextAction: Map<String, Any?>?,
+    val nextAction: Map<String, @RawValue Any?>?,
 
     /**
      * @return ID of the payment method (a PaymentMethod, Card, BankAccount, or saved Source object)
@@ -127,7 +127,8 @@ data class PaymentIntent internal constructor(
      * @return The payment error encountered in the previous PaymentIntent confirmation.
      */
     val lastPaymentError: Error?
-) : StripeModel(), StripeIntent {
+) : StripeModel, StripeIntent {
+    @IgnoredOnParcel
     override val nextActionType: StripeIntent.NextActionType? = nextAction?.let {
         StripeIntent.NextActionType.fromCode(it[FIELD_NEXT_ACTION_TYPE] as String?)
     }
@@ -186,7 +187,8 @@ data class PaymentIntent internal constructor(
      *
      * See [last_payment_error](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-last_payment_error).
      */
-    data class Error private constructor(
+    @Parcelize
+    data class Error internal constructor(
 
         /**
          * For card errors, the ID of the failed charge.
@@ -233,7 +235,7 @@ data class PaymentIntent internal constructor(
          * The type of error returned.
          */
         val type: Type?
-    ) {
+    ) : StripeModel {
         enum class Type(val code: String) {
             ApiConnectionError("api_connection_error"),
             ApiError("api_error"),
@@ -249,35 +251,21 @@ data class PaymentIntent internal constructor(
                 }
             }
         }
+    }
 
-        internal companion object {
-            private const val FIELD_CHARGE = "charge"
-            private const val FIELD_CODE = "code"
-            private const val FIELD_DECLINE_CODE = "decline_code"
-            private const val FIELD_DOC_URL = "doc_url"
-            private const val FIELD_MESSAGE = "message"
-            private const val FIELD_PARAM = "param"
-            private const val FIELD_PAYMENT_METHOD = "payment_method"
-            private const val FIELD_TYPE = "type"
+    internal data class ClientSecret(internal val value: String) {
+        internal val paymentIntentId: String =
+            value.split("_secret".toRegex())
+                .dropLastWhile { it.isEmpty() }.toTypedArray()[0]
 
-            internal fun fromJson(errorJson: JSONObject?): Error? {
-                return if (errorJson == null) {
-                    null
-                } else {
-                    Error(
-                        charge = optString(errorJson, FIELD_CHARGE),
-                        code = optString(errorJson, FIELD_CODE),
-                        declineCode = optString(errorJson, FIELD_DECLINE_CODE),
-                        docUrl = optString(errorJson, FIELD_DOC_URL),
-                        message = optString(errorJson, FIELD_MESSAGE),
-                        param = optString(errorJson, FIELD_PARAM),
-                        paymentMethod = PaymentMethod.fromJson(
-                            errorJson.optJSONObject(FIELD_PAYMENT_METHOD)
-                        ),
-                        type = Type.fromCode(optString(errorJson, FIELD_TYPE))
-                    )
-                }
+        init {
+            require(PATTERN.matcher(value).matches()) {
+                "Invalid client secret: $value"
             }
+        }
+
+        private companion object {
+            private val PATTERN = Pattern.compile("^pi_(\\w)+_secret_(\\w)+$")
         }
     }
 
@@ -298,28 +286,6 @@ data class PaymentIntent internal constructor(
     }
 
     companion object {
-        private const val VALUE_PAYMENT_INTENT = "payment_intent"
-
-        private const val FIELD_ID = "id"
-        private const val FIELD_OBJECT = "object"
-        private const val FIELD_AMOUNT = "amount"
-        private const val FIELD_CREATED = "created"
-        private const val FIELD_CANCELED_AT = "canceled_at"
-        private const val FIELD_CANCELLATION_REASON = "cancellation_reason"
-        private const val FIELD_CAPTURE_METHOD = "capture_method"
-        private const val FIELD_CLIENT_SECRET = "client_secret"
-        private const val FIELD_CONFIRMATION_METHOD = "confirmation_method"
-        private const val FIELD_CURRENCY = "currency"
-        private const val FIELD_DESCRIPTION = "description"
-        private const val FIELD_LAST_PAYMENT_ERROR = "last_payment_error"
-        private const val FIELD_LIVEMODE = "livemode"
-        private const val FIELD_NEXT_ACTION = "next_action"
-        private const val FIELD_PAYMENT_METHOD_ID = "payment_method_id"
-        private const val FIELD_PAYMENT_METHOD_TYPES = "payment_method_types"
-        private const val FIELD_RECEIPT_EMAIL = "receipt_email"
-        private const val FIELD_STATUS = "status"
-        private const val FIELD_SETUP_FUTURE_USAGE = "setup_future_usage"
-
         private const val FIELD_NEXT_ACTION_TYPE = "type"
 
         internal fun parseIdFromClientSecret(clientSecret: String): String {
@@ -327,73 +293,10 @@ data class PaymentIntent internal constructor(
                 .dropLastWhile { it.isEmpty() }.toTypedArray()[0]
         }
 
-        fun fromString(jsonString: String?): PaymentIntent? {
-            return if (jsonString == null) {
-                null
-            } else {
-                try {
-                    fromJson(JSONObject(jsonString))
-                } catch (ignored: JSONException) {
-                    null
-                }
-            }
-        }
-
         fun fromJson(jsonObject: JSONObject?): PaymentIntent? {
-            if (jsonObject == null || VALUE_PAYMENT_INTENT != jsonObject.optString(FIELD_OBJECT)) {
-                return null
+            return jsonObject?.let {
+                PaymentIntentJsonParser().parse(it)
             }
-
-            val id = optString(jsonObject, FIELD_ID)
-            val objectType = optString(jsonObject, FIELD_OBJECT)
-            val paymentMethodTypes = jsonArrayToList(
-                jsonObject.optJSONArray(FIELD_PAYMENT_METHOD_TYPES))
-            val amount = optLong(jsonObject, FIELD_AMOUNT)
-            val canceledAt = jsonObject.optLong(FIELD_CANCELED_AT)
-            val cancellationReason = CancellationReason.fromCode(
-                optString(jsonObject, FIELD_CANCELLATION_REASON)
-            )
-            val captureMethod = optString(jsonObject, FIELD_CAPTURE_METHOD)
-            val clientSecret = optString(jsonObject, FIELD_CLIENT_SECRET)
-            val confirmationMethod = optString(jsonObject, FIELD_CONFIRMATION_METHOD)
-            val created = jsonObject.optLong(FIELD_CREATED)
-            val currency = optCurrency(jsonObject, FIELD_CURRENCY)
-            val description = optString(jsonObject, FIELD_DESCRIPTION)
-            val livemode = optBoolean(jsonObject, FIELD_LIVEMODE)
-            val paymentMethodId = optString(jsonObject, FIELD_PAYMENT_METHOD_ID)
-            val receiptEmail = optString(jsonObject, FIELD_RECEIPT_EMAIL)
-            val status = StripeIntent.Status.fromCode(
-                optString(jsonObject, FIELD_STATUS)
-            )
-            val setupFutureUsage = StripeIntent.Usage.fromCode(
-                optString(jsonObject, FIELD_SETUP_FUTURE_USAGE)
-            )
-            val nextAction = optMap(jsonObject, FIELD_NEXT_ACTION)
-            val lastPaymentError = Error.fromJson(
-                jsonObject.optJSONObject(FIELD_LAST_PAYMENT_ERROR)
-            )
-
-            return PaymentIntent(
-                id,
-                objectType,
-                paymentMethodTypes,
-                amount,
-                canceledAt,
-                cancellationReason,
-                captureMethod,
-                clientSecret,
-                confirmationMethod,
-                created,
-                currency,
-                description,
-                livemode,
-                nextAction,
-                paymentMethodId,
-                receiptEmail,
-                status,
-                setupFutureUsage,
-                lastPaymentError
-            )
         }
     }
 }

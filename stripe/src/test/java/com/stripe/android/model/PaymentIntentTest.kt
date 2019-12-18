@@ -1,7 +1,9 @@
 package com.stripe.android.model
 
+import com.stripe.android.model.parsers.PaymentIntentJsonParser
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -14,7 +16,7 @@ class PaymentIntentTest {
 
     @Test
     fun getAuthorizationUrl_whenProvidedBadUrl_doesNotCrash() {
-        val paymentIntent = requireNotNull(PaymentIntent.fromJson(
+        val paymentIntent = requireNotNull(PARSER.parse(
             PAYMENT_INTENT_WITH_SOURCE_WITH_BAD_AUTH_URL_JSON
         ))
 
@@ -26,7 +28,7 @@ class PaymentIntentTest {
     @Test
     fun getRedirectUrl_withRedirectToUrlPopulate_returnsRedirectUrl() {
         val paymentIntent = requireNotNull(
-            PaymentIntent.fromJson(PARTIAL_PAYMENT_INTENT_WITH_REDIRECT_URL_JSON)
+            PARSER.parse(PARTIAL_PAYMENT_INTENT_WITH_REDIRECT_URL_JSON)
         )
         assertTrue(paymentIntent.requiresAction())
         assertEquals(StripeIntent.NextActionType.RedirectToUrl, paymentIntent.nextActionType)
@@ -37,9 +39,9 @@ class PaymentIntentTest {
 
     @Test
     fun getRedirectUrl_withAuthorizeWithUrlPopulated_returnsRedirectUrl() {
-        val paymentIntent = PaymentIntent
-            .fromJson(PARTIAL_PAYMENT_INTENT_WITH_AUTHORIZE_WITH_URL_JSON)
-        assertNotNull(paymentIntent)
+        val paymentIntent = requireNotNull(
+            PARSER.parse(PARTIAL_PAYMENT_INTENT_WITH_AUTHORIZE_WITH_URL_JSON)
+        )
         assertEquals(StripeIntent.NextActionType.RedirectToUrl, paymentIntent.nextActionType)
         val redirectUrl = paymentIntent.redirectUrl
         assertNotNull(redirectUrl)
@@ -49,8 +51,8 @@ class PaymentIntentTest {
     @Test
     fun parseIdFromClientSecret_parsesCorrectly() {
         val clientSecret = "pi_1CkiBMLENEVhOs7YMtUehLau_secret_s4O8SDh7s6spSmHDw1VaYPGZA"
-        val id = PaymentIntent.parseIdFromClientSecret(clientSecret)
-        assertEquals("pi_1CkiBMLENEVhOs7YMtUehLau", id)
+        val paymentIntentId = PaymentIntent.ClientSecret(clientSecret).paymentIntentId
+        assertEquals("pi_1CkiBMLENEVhOs7YMtUehLau", paymentIntentId)
     }
 
     @Test
@@ -119,7 +121,28 @@ class PaymentIntentTest {
             PaymentIntentFixtures.CANCELLED.canceledAt)
     }
 
+    @Test
+    fun clientSecret_withInvalidKeys_throwsException() {
+        assertFailsWith<IllegalArgumentException> {
+            PaymentIntent.ClientSecret("pi_12345")
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            PaymentIntent.ClientSecret("pi_12345_secret_")
+        }
+    }
+
+    @Test
+    fun clientSecret_withValidKeys_throwsException() {
+        assertEquals(
+            "pi_a1b2c3_secret_x7y8z9",
+            PaymentIntent.ClientSecret("pi_a1b2c3_secret_x7y8z9").value
+        )
+    }
+
     private companion object {
+        private val PARSER = PaymentIntentJsonParser()
+
         private const val BAD_URL: String = "nonsense-blahblah"
 
         private val PAYMENT_INTENT_WITH_SOURCE_WITH_BAD_AUTH_URL_JSON = JSONObject(

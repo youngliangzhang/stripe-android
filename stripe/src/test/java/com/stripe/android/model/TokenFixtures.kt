@@ -1,11 +1,12 @@
 package com.stripe.android.model
 
+import com.stripe.android.model.parsers.TokenJsonParser
 import org.json.JSONObject
 
 internal object TokenFixtures {
+    private val PARSER = TokenJsonParser()
 
-    @JvmField
-    val CARD_TOKEN = Token.fromJson(JSONObject(
+    val CARD_TOKEN = requireNotNull(PARSER.parse(JSONObject(
         """
         {
             "id": "tok_189fi32eZvKYlo2Ct0KZvU5Y",
@@ -40,10 +41,9 @@ internal object TokenFixtures {
             "used": false
         }
         """.trimIndent()
-    ))!!
+    )))
 
-    @JvmField
-    val BANK_TOKEN = Token.fromJson(JSONObject(
+    val BANK_TOKEN = requireNotNull(PARSER.parse(JSONObject(
         """
         {
             "id": "btok_9xJAbronBnS9bH",
@@ -68,5 +68,5 @@ internal object TokenFixtures {
             "used": false
         }
         """.trimIndent()
-    ))!!
+    )))
 }

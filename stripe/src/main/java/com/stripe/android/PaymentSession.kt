@@ -10,6 +10,7 @@ import androidx.fragment.app.Fragment
 import com.stripe.android.model.Customer
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.view.ActivityStarter
+import com.stripe.android.view.BillingAddressFields
 import com.stripe.android.view.PaymentFlowActivity
 import com.stripe.android.view.PaymentFlowActivityStarter
 import com.stripe.android.view.PaymentMethodsActivity
@@ -185,9 +186,22 @@ class PaymentSession @VisibleForTesting internal constructor(
     }
 
     /**
-     * See [presentPaymentMethodSelection]
+     * Launch the [PaymentMethodsActivity] to allow the user to select a payment method,
+     * or to add a new one.
+     *
+     * The initial selected Payment Method ID uses the following logic.
+     *
+     *  1. If {@param userSelectedPaymentMethodId} is specified, use that
+     *  2. If the instance's [PaymentSessionData.paymentMethod] is non-null, use that
+     *  3. If the instance's [PaymentSessionPrefs.getSelectedPaymentMethodId] is non-null, use that
+     *  4. Otherwise, choose the most recently added Payment Method
+     *
+     * See [getSelectedPaymentMethodId]
+     *
+     * @param selectedPaymentMethodId if non-null, the ID of the Payment Method that should be
+     * initially selected on the Payment Method selection screen
      */
-    fun presentPaymentMethodSelection(selectedPaymentMethodId: String) {
+    fun presentPaymentMethodSelection(selectedPaymentMethodId: String? = null) {
         presentPaymentMethodSelection(false, selectedPaymentMethodId)
     }
 
@@ -208,9 +222,10 @@ class PaymentSession @VisibleForTesting internal constructor(
      * @param userSelectedPaymentMethodId if non-null, the ID of the Payment Method that should be
      * initially selected on the Payment Method selection screen
      */
+    @Deprecated("Use presentPaymentMethodSelection(selectedPaymentMethodId) and configure billing fields using PaymentSessionConfig.Builder.setBillingAddressFields()")
     @JvmOverloads
     fun presentPaymentMethodSelection(
-        shouldRequirePostalCode: Boolean = false,
+        shouldRequirePostalCode: Boolean,
         userSelectedPaymentMethodId: String? = null
     ) {
         paymentMethodsActivityStarter.startForResult(
@@ -218,10 +233,12 @@ class PaymentSession @VisibleForTesting internal constructor(
                 .setInitialPaymentMethodId(
                     getSelectedPaymentMethodId(userSelectedPaymentMethodId))
                 .setShouldRequirePostalCode(shouldRequirePostalCode)
-                .setAddPaymentMethodFooter(config?.addPaymentMethodFooter ?: 0)
+                .setAddPaymentMethodFooter(config?.addPaymentMethodFooterLayoutId ?: 0)
                 .setIsPaymentSessionActive(true)
                 .setPaymentConfiguration(PaymentConfiguration.getInstance(context))
                 .setPaymentMethodTypes(config?.paymentMethodTypes.orEmpty())
+                .setWindowFlags(config?.windowFlags)
+                .setBillingAddressFields(config?.billingAddressFields ?: BillingAddressFields.None)
                 .build()
         )
     }
@@ -267,6 +284,7 @@ class PaymentSession @VisibleForTesting internal constructor(
                 .setPaymentSessionConfig(config)
                 .setPaymentSessionData(paymentSessionData)
                 .setIsPaymentSessionActive(true)
+                .setWindowFlags(config?.windowFlags)
                 .build()
         )
     }
@@ -342,7 +360,6 @@ class PaymentSession @VisibleForTesting internal constructor(
     internal companion object {
         internal const val TOKEN_PAYMENT_SESSION: String = "PaymentSession"
 
-        internal const val EXTRA_PAYMENT_SESSION_ACTIVE: String = "extra_payment_session_active"
         internal const val EXTRA_PAYMENT_SESSION_DATA: String = "extra_payment_session_data"
 
         private const val STATE_PAYMENT_SESSION_DATA: String = "state_payment_session_data"

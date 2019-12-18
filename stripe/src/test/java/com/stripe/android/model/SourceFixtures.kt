@@ -1,9 +1,15 @@
 package com.stripe.android.model
 
 import com.stripe.android.model.SourceOrderFixtures.SOURCE_ORDER_JSON
+import com.stripe.android.model.parsers.CustomerSourceJsonParser
+import com.stripe.android.model.parsers.SourceCodeVerificationJsonParser
+import com.stripe.android.model.parsers.SourceJsonParser
+import com.stripe.android.model.parsers.SourceReceiverJsonParser
+import com.stripe.android.model.parsers.SourceRedirectJsonParser
 import org.json.JSONObject
 
 internal object SourceFixtures {
+    private val PARSER = SourceJsonParser()
 
     val ALIPAY_JSON = JSONObject(
         """
@@ -43,7 +49,7 @@ internal object SourceFixtures {
         """.trimIndent()
     )
 
-    val WECHAT = requireNotNull(Source.fromJson(JSONObject(
+    val WECHAT = requireNotNull(PARSER.parse(JSONObject(
         """
         {
             "id": "src_1F4ZSkBNJ02",
@@ -85,7 +91,7 @@ internal object SourceFixtures {
         """.trimIndent()
     )))
 
-    val SOURCE_CARD = requireNotNull(Source.fromJson(JSONObject(
+    val SOURCE_CARD = requireNotNull(PARSER.parse(JSONObject(
         """
         {
             "id": "src_19t3xKBZqEXluyI4uz2dxAfQ",
@@ -132,7 +138,7 @@ internal object SourceFixtures {
         """.trimIndent()
     )))
 
-    val CARD = requireNotNull(Source.fromJson(JSONObject(
+    val CARD = requireNotNull(PARSER.parse(JSONObject(
         """
         {
             "id": "card_1ELxrOCRMbs6FrXfdxOGjnaD",
@@ -200,9 +206,7 @@ internal object SourceFixtures {
         """.trimIndent()
     )
 
-    val SOURCE_REDIRECT = requireNotNull(
-        SourceRedirect.fromJson(SOURCE_REDIRECT_JSON)
-    )
+    val SOURCE_REDIRECT = SourceRedirectJsonParser().parse(SOURCE_REDIRECT_JSON)
 
     private val SOURCE_CODE_VERIFICATION_JSON = JSONObject(
         """
@@ -213,9 +217,8 @@ internal object SourceFixtures {
         """.trimIndent()
     )
 
-    val SOURCE_CODE_VERIFICATION = requireNotNull(
-        SourceCodeVerification.fromJson(SOURCE_CODE_VERIFICATION_JSON)
-    )
+    val SOURCE_CODE_VERIFICATION =
+        SourceCodeVerificationJsonParser().parse(SOURCE_CODE_VERIFICATION_JSON)
 
     private val SOURCE_RECEIVER_JSON = JSONObject(
         """
@@ -228,7 +231,7 @@ internal object SourceFixtures {
         """.trimIndent()
     )
 
-    val SOURCE_RECEIVER = requireNotNull(SourceReceiver.fromJson(SOURCE_RECEIVER_JSON))
+    val SOURCE_RECEIVER = SourceReceiverJsonParser().parse(SOURCE_RECEIVER_JSON)
 
     val SOURCE_OWNER_WITH_NULLS = JSONObject(
         """
@@ -293,7 +296,7 @@ internal object SourceFixtures {
             """.trimIndent()
     )
 
-    internal val SOURCE_WITH_SOURCE_ORDER = requireNotNull(Source.fromJson(JSONObject(
+    internal val SOURCE_WITH_SOURCE_ORDER = requireNotNull(PARSER.parse(JSONObject(
         """
         {
             "id": "src_1FfB6GKmrohBAXC",
@@ -386,7 +389,7 @@ internal object SourceFixtures {
     )
 
     internal val CUSTOMER_SOURCE_CARD = requireNotNull(
-        CustomerSource.fromJson(CUSTOMER_SOURCE_CARD_JSON)
+        CustomerSourceJsonParser().parse(CUSTOMER_SOURCE_CARD_JSON)
     )
 
     internal const val DOGE_COIN = "dogecoin"

@@ -1,5 +1,6 @@
 package com.stripe.android.model
 
+import com.stripe.android.model.parsers.PaymentMethodJsonParser
 import com.stripe.android.utils.ParcelUtils
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -23,17 +24,17 @@ class PaymentMethodTest {
             .setType("ideal")
             .setCustomerId("cus_AQsHpvKfKwJDrF")
             .setBillingDetails(PaymentMethodFixtures.BILLING_DETAILS)
-            .setIdeal(PaymentMethod.Ideal.create("my bank", "bank id"))
+            .setIdeal(PaymentMethod.Ideal("my bank", "bank id"))
             .build()
 
-        assertEquals(paymentMethod, PaymentMethod.fromJson(PM_IDEAL_JSON))
+        assertEquals(paymentMethod, PaymentMethodJsonParser().parse(PM_IDEAL_JSON))
     }
 
     @Test
     @Throws(JSONException::class)
     fun toJson_withFpx_shouldCreateExpectedObject() {
         assertEquals(PaymentMethodFixtures.FPX_PAYMENT_METHOD,
-            PaymentMethod.fromJson(PM_FPX_JSON))
+            PaymentMethodJsonParser().parse(PM_FPX_JSON))
     }
 
     @Test
@@ -45,7 +46,7 @@ class PaymentMethodTest {
                 .setLiveMode(false)
                 .setCreated(1570809799L)
                 .setSepaDebit(
-                    PaymentMethod.SepaDebit.create(
+                    PaymentMethod.SepaDebit(
                         "3704",
                         null,
                         "DE",
@@ -83,13 +84,13 @@ class PaymentMethodTest {
     @Throws(JSONException::class)
     fun fromString_shouldReturnExpectedPaymentMethod() {
         assertEquals(PaymentMethodFixtures.CARD_PAYMENT_METHOD,
-            PaymentMethod.fromJson(PM_CARD_JSON))
+            PaymentMethodJsonParser().parse(PM_CARD_JSON))
     }
 
     @Test
     @Throws(JSONException::class)
     fun fromString_withIdeal_returnsExpectedObject() {
-        val paymentMethod = PaymentMethod.fromJson(PM_IDEAL_JSON)
+        val paymentMethod = PaymentMethodJsonParser().parse(PM_IDEAL_JSON)
         assertEquals("ideal", paymentMethod?.type)
     }
 
@@ -100,8 +101,8 @@ class PaymentMethodTest {
             .build()
             .toParamMap()
         assertEquals(1, billingDetails.size)
-        assertFalse(billingDetails.containsKey(PaymentMethod.BillingDetails.FIELD_ADDRESS))
-        assertTrue(billingDetails.containsKey(PaymentMethod.BillingDetails.FIELD_NAME))
+        assertFalse(billingDetails.containsKey(PaymentMethod.BillingDetails.PARAM_ADDRESS))
+        assertTrue(billingDetails.containsKey(PaymentMethod.BillingDetails.PARAM_NAME))
     }
 
     @Test
@@ -121,7 +122,7 @@ class PaymentMethodTest {
             .setCard(PaymentMethodFixtures.CARD)
             .setCardPresent(PaymentMethod.CardPresent.EMPTY)
             .setFpx(PaymentMethodFixtures.FPX_PAYMENT_METHOD.fpx)
-            .setIdeal(PaymentMethod.Ideal.create("my bank", "bank id"))
+            .setIdeal(PaymentMethod.Ideal("my bank", "bank id"))
             .setSepaDebit(PaymentMethodFixtures.SEPA_DEBIT_PAYMENT_METHOD.sepaDebit)
             .build()
 

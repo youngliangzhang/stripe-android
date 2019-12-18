@@ -1,16 +1,21 @@
 package com.stripe.android.view
 
-import android.text.Editable
-import android.text.TextWatcher
+import android.content.Context
 import android.view.View
 import android.widget.LinearLayout
+import androidx.test.core.app.ApplicationProvider
 import com.google.android.material.textfield.TextInputLayout
+import com.nhaarman.mockitokotlin2.mock
 import com.nhaarman.mockitokotlin2.never
+import com.nhaarman.mockitokotlin2.verify
+import com.stripe.android.ApiKeyFixtures
 import com.stripe.android.CardNumberFixtures.VALID_AMEX_NO_SPACES
 import com.stripe.android.CardNumberFixtures.VALID_AMEX_WITH_SPACES
 import com.stripe.android.CardNumberFixtures.VALID_DINERS_CLUB_WITH_SPACES
 import com.stripe.android.CardNumberFixtures.VALID_VISA_NO_SPACES
 import com.stripe.android.CardNumberFixtures.VALID_VISA_WITH_SPACES
+import com.stripe.android.CustomerSession
+import com.stripe.android.PaymentConfiguration
 import com.stripe.android.R
 import com.stripe.android.model.Address
 import com.stripe.android.model.PaymentMethod
@@ -22,7 +27,6 @@ import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_EXPI
 import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_POSTAL
 import com.stripe.android.view.CardMultilineWidget.Companion.CARD_MULTILINE_TOKEN
 import java.util.Calendar
-import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,7 +37,6 @@ import kotlin.test.assertTrue
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.Mockito.reset
-import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
 import org.robolectric.RobolectricTestRunner
 
@@ -41,9 +44,7 @@ import org.robolectric.RobolectricTestRunner
  * Test class for [CardMultilineWidget].
  */
 @RunWith(RobolectricTestRunner::class)
-internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
-    CardInputTestActivity::class.java
-) {
+internal class CardMultilineWidgetTest {
 
     private lateinit var cardMultilineWidget: CardMultilineWidget
     private lateinit var noZipCardMultilineWidget: CardMultilineWidget
@@ -55,65 +56,52 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
     @Mock
     private lateinit var noZipCardListener: CardInputListener
 
+    private val activityScenarioFactory: ActivityScenarioFactory by lazy {
+        ActivityScenarioFactory(ApplicationProvider.getApplicationContext())
+    }
+
     @BeforeTest
     fun setup() {
         MockitoAnnotations.initMocks(this)
 
-        val activity = createStartedActivity()
-        cardMultilineWidget = activity.cardMultilineWidget
-        fullGroup = WidgetControlGroup(cardMultilineWidget)
+        CustomerSession.instance = mock()
 
-        noZipCardMultilineWidget = activity.noZipCardMulitlineWidget
-        noZipGroup = WidgetControlGroup(noZipCardMultilineWidget)
+        val context: Context = ApplicationProvider.getApplicationContext()
+        PaymentConfiguration.init(context, ApiKeyFixtures.FAKE_PUBLISHABLE_KEY)
 
-        fullGroup.cardNumberEditText.setText("")
+        activityScenarioFactory.create<AddPaymentMethodActivity>(
+            AddPaymentMethodActivityStarter.Args.Builder()
+                .setPaymentMethodType(PaymentMethod.Type.Card)
+                .setPaymentConfiguration(PaymentConfiguration.getInstance(context))
+                .setBillingAddressFields(BillingAddressFields.PostalCode)
+                .build()
+        ).use { activityScenario ->
+            activityScenario.onActivity { activity ->
+                cardMultilineWidget = activity.findViewById(R.id.card_multiline_widget)
+                fullGroup = WidgetControlGroup(cardMultilineWidget)
 
-        cardMultilineWidget.setCardNumberTextWatcher(object : TextWatcher {
-            override fun afterTextChanged(p0: Editable?) {
-            }
+                fullGroup.cardNumberEditText.setText("")
 
-            override fun beforeTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {
+                cardMultilineWidget.setCardNumberTextWatcher(EMPTY_WATCHER)
+                cardMultilineWidget.setExpiryDateTextWatcher(EMPTY_WATCHER)
+                cardMultilineWidget.setCvcNumberTextWatcher(EMPTY_WATCHER)
+                cardMultilineWidget.setPostalCodeTextWatcher(EMPTY_WATCHER)
+                cardMultilineWidget.paymentMethodBillingDetailsBuilder
             }
+        }
 
-            override fun onTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {
+        activityScenarioFactory.create<AddPaymentMethodActivity>(
+            AddPaymentMethodActivityStarter.Args.Builder()
+                .setPaymentMethodType(PaymentMethod.Type.Card)
+                .setPaymentConfiguration(PaymentConfiguration.getInstance(context))
+                .setBillingAddressFields(BillingAddressFields.None)
+                .build()
+        ).use { activityScenario ->
+            activityScenario.onActivity {
+                noZipCardMultilineWidget = it.findViewById(R.id.card_multiline_widget)
+                noZipGroup = WidgetControlGroup(noZipCardMultilineWidget)
             }
-        })
-        cardMultilineWidget.setExpiryDateTextWatcher(object : TextWatcher {
-            override fun afterTextChanged(p0: Editable?) {
-            }
-
-            override fun beforeTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {
-            }
-
-            override fun onTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {
-            }
-        })
-        cardMultilineWidget.setCvcNumberTextWatcher(object : TextWatcher {
-            override fun afterTextChanged(p0: Editable?) {
-            }
-
-            override fun beforeTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {
-            }
-
-            override fun onTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {
-            }
-        })
-        cardMultilineWidget.setPostalCodeTextWatcher(object : TextWatcher {
-            override fun afterTextChanged(p0: Editable?) {
-            }
-
-            override fun beforeTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {
-            }
-
-            override fun onTextChanged(p0: CharSequence?, p1: Int, p2: Int, p3: Int) {
-            }
-        })
-        cardMultilineWidget.paymentMethodBillingDetailsBuilder
-    }
-
-    @AfterTest
-    override fun tearDown() {
-        super.tearDown()
+        }
     }
 
     @Test
@@ -163,8 +151,7 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         fullGroup.cvcEditText.append("123")
         fullGroup.postalCodeEditText.append("12345")
 
-        val card = cardMultilineWidget.card
-        assertNotNull(card)
+        val card = requireNotNull(cardMultilineWidget.card)
         assertEquals(VALID_VISA_NO_SPACES, card.number)
         assertNotNull(card.expMonth)
         assertNotNull(card.expYear)
@@ -300,12 +287,12 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         assertNotNull(params)
 
         val expectedParams = PaymentMethodCreateParams.create(
-            PaymentMethodCreateParams.Card.Builder()
-                .setNumber(VALID_VISA_NO_SPACES)
-                .setCvc("123")
-                .setExpiryYear(2050)
-                .setExpiryMonth(12)
-                .build(),
+            PaymentMethodCreateParams.Card(
+                number = VALID_VISA_NO_SPACES,
+                cvc = "123",
+                expiryMonth = 12,
+                expiryYear = 2050
+            ),
             PaymentMethod.BillingDetails.Builder()
                 .setAddress(Address.Builder()
                     .setPostalCode("12345")
@@ -330,13 +317,12 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         val card = cardMultilineWidget.paymentMethodCard
         assertNotNull(card)
 
-        val inputCard =
-            PaymentMethodCreateParams.Card.Builder()
-                .setNumber(VALID_VISA_NO_SPACES)
-                .setCvc("123")
-                .setExpiryYear(2050)
-                .setExpiryMonth(12)
-                .build()
+        val inputCard = PaymentMethodCreateParams.Card(
+            number = VALID_VISA_NO_SPACES,
+            cvc = "123",
+            expiryMonth = 12,
+            expiryYear = 2050
+        )
         assertEquals(inputCard, card)
 
         assertEquals(
@@ -371,8 +357,12 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         val card = noZipCardMultilineWidget.paymentMethodCard
         assertNotNull(card)
 
-        val inputCard = PaymentMethodCreateParams.Card.Builder().setNumber(VALID_VISA_NO_SPACES)
-            .setCvc("123").setExpiryYear(2050).setExpiryMonth(12).build()
+        val inputCard = PaymentMethodCreateParams.Card(
+            number = VALID_VISA_NO_SPACES,
+            cvc = "123",
+            expiryMonth = 12,
+            expiryYear = 2050
+        )
         assertEquals(inputCard, card)
 
         assertNull(noZipCardMultilineWidget.paymentMethodBillingDetails)
@@ -392,8 +382,12 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
 
         assertNotNull(card)
 
-        val inputCard = PaymentMethodCreateParams.Card.Builder().setNumber(VALID_AMEX_NO_SPACES)
-            .setCvc("1234").setExpiryYear(2050).setExpiryMonth(12).build()
+        val inputCard = PaymentMethodCreateParams.Card(
+            number = VALID_AMEX_NO_SPACES,
+            cvc = "1234",
+            expiryMonth = 12,
+            expiryYear = 2050
+        )
         assertEquals(inputCard, card)
 
         assertNull(noZipCardMultilineWidget.paymentMethodBillingDetails)
@@ -411,8 +405,12 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         val card = noZipCardMultilineWidget.paymentMethodCard
 
         assertNotNull(card)
-        val inputCard = PaymentMethodCreateParams.Card.Builder().setNumber(VALID_AMEX_NO_SPACES)
-            .setCvc("123").setExpiryYear(2050).setExpiryMonth(12).build()
+        val inputCard = PaymentMethodCreateParams.Card(
+            number = VALID_AMEX_NO_SPACES,
+            cvc = "123",
+            expiryMonth = 12,
+            expiryYear = 2050
+        )
         assertEquals(inputCard, card)
 
         assertNull(noZipCardMultilineWidget.paymentMethodBillingDetails)
@@ -520,13 +518,13 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         noZipCardMultilineWidget.setCardInputListener(noZipCardListener)
 
         fullGroup.cardNumberEditText.setText(VALID_VISA_WITH_SPACES)
-        verify<CardInputListener>(fullCardListener).onCardComplete()
-        verify<CardInputListener>(fullCardListener).onFocusChange(FOCUS_EXPIRY)
+        verify(fullCardListener).onCardComplete()
+        verify(fullCardListener).onFocusChange(FOCUS_EXPIRY)
         assertTrue(fullGroup.expiryDateEditText.hasFocus())
 
         noZipGroup.cardNumberEditText.setText(VALID_AMEX_WITH_SPACES)
-        verify<CardInputListener>(noZipCardListener).onCardComplete()
-        verify<CardInputListener>(noZipCardListener).onFocusChange(FOCUS_EXPIRY)
+        verify(noZipCardListener).onCardComplete()
+        verify(noZipCardListener).onFocusChange(FOCUS_EXPIRY)
         assertTrue(noZipGroup.expiryDateEditText.hasFocus())
     }
 
@@ -537,14 +535,14 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
 
         fullGroup.expiryDateEditText.append("12")
         fullGroup.expiryDateEditText.append("50")
-        verify<CardInputListener>(fullCardListener).onExpirationComplete()
-        verify<CardInputListener>(fullCardListener).onFocusChange(FOCUS_CVC)
+        verify(fullCardListener).onExpirationComplete()
+        verify(fullCardListener).onFocusChange(FOCUS_CVC)
         assertTrue(fullGroup.cvcEditText.hasFocus())
 
         noZipGroup.expiryDateEditText.append("12")
         noZipGroup.expiryDateEditText.append("50")
-        verify<CardInputListener>(noZipCardListener).onExpirationComplete()
-        verify<CardInputListener>(noZipCardListener).onFocusChange(FOCUS_CVC)
+        verify(noZipCardListener).onExpirationComplete()
+        verify(noZipCardListener).onFocusChange(FOCUS_CVC)
         assertTrue(noZipGroup.cvcEditText.hasFocus())
     }
 
@@ -557,16 +555,16 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         fullGroup.expiryDateEditText.append("12")
         fullGroup.expiryDateEditText.append("50")
         fullGroup.cvcEditText.append("123")
-        verify<CardInputListener>(fullCardListener).onCvcComplete()
-        verify<CardInputListener>(fullCardListener).onFocusChange(FOCUS_POSTAL)
+        verify(fullCardListener).onCvcComplete()
+        verify(fullCardListener).onFocusChange(FOCUS_POSTAL)
         assertTrue(fullGroup.postalCodeEditText.hasFocus())
 
         noZipGroup.cardNumberEditText.setText(VALID_VISA_WITH_SPACES)
         noZipGroup.expiryDateEditText.append("12")
         noZipGroup.expiryDateEditText.append("50")
         noZipGroup.cvcEditText.append("123")
-        verify<CardInputListener>(noZipCardListener).onCvcComplete()
-        verify<CardInputListener>(noZipCardListener, never()).onFocusChange(FOCUS_POSTAL)
+        verify(noZipCardListener).onCvcComplete()
+        verify(noZipCardListener, never()).onFocusChange(FOCUS_POSTAL)
         assertTrue(noZipGroup.cvcEditText.hasFocus())
     }
 
@@ -583,7 +581,7 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         assertTrue(fullGroup.expiryDateEditText.hasFocus())
         ViewTestUtils.sendDeleteKeyEvent(fullGroup.expiryDateEditText)
 
-        verify<CardInputListener>(fullCardListener).onFocusChange(FOCUS_CARD)
+        verify(fullCardListener).onFocusChange(FOCUS_CARD)
         assertTrue(fullGroup.cardNumberEditText.hasFocus())
         assertEquals(deleteOneCharacterString, fullGroup.cardNumberEditText.text?.toString())
 
@@ -593,7 +591,7 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         assertTrue(noZipGroup.expiryDateEditText.hasFocus())
         ViewTestUtils.sendDeleteKeyEvent(noZipGroup.expiryDateEditText)
 
-        verify<CardInputListener>(noZipCardListener).onFocusChange(FOCUS_CARD)
+        verify(noZipCardListener).onFocusChange(FOCUS_CARD)
         assertTrue(noZipGroup.cardNumberEditText.hasFocus())
         assertEquals(deleteOneCharacterString, noZipGroup.cardNumberEditText.text?.toString())
     }
@@ -610,7 +608,7 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         assertTrue(fullGroup.cvcEditText.hasFocus())
         ViewTestUtils.sendDeleteKeyEvent(fullGroup.cvcEditText)
 
-        verify<CardInputListener>(fullCardListener).onFocusChange(FOCUS_EXPIRY)
+        verify(fullCardListener).onFocusChange(FOCUS_EXPIRY)
         assertTrue(fullGroup.expiryDateEditText.hasFocus())
         assertEquals("12/5", fullGroup.expiryDateEditText.text?.toString())
 
@@ -621,7 +619,7 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         assertTrue(noZipGroup.cvcEditText.hasFocus())
         ViewTestUtils.sendDeleteKeyEvent(noZipGroup.cvcEditText)
 
-        verify<CardInputListener>(noZipCardListener).onFocusChange(FOCUS_EXPIRY)
+        verify(noZipCardListener).onFocusChange(FOCUS_EXPIRY)
         assertTrue(noZipGroup.expiryDateEditText.hasFocus())
         assertEquals("12/5", noZipGroup.expiryDateEditText.text.toString())
     }
@@ -638,7 +636,7 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
         reset<CardInputListener>(fullCardListener)
         ViewTestUtils.sendDeleteKeyEvent(fullGroup.postalCodeEditText)
 
-        verify<CardInputListener>(fullCardListener).onFocusChange(FOCUS_CVC)
+        verify(fullCardListener).onFocusChange(FOCUS_CVC)
         assertEquals("12", fullGroup.cvcEditText.text?.toString())
     }
 
@@ -751,5 +749,7 @@ internal class CardMultilineWidgetTest : BaseViewTest<CardInputTestActivity>(
     private companion object {
         // Every Card made by the CardInputView should have the card widget token.
         private val EXPECTED_LOGGING_ARRAY = arrayOf(CARD_MULTILINE_TOKEN)
+
+        private val EMPTY_WATCHER = object : StripeTextWatcher() {}
     }
 }

@@ -1,16 +1,18 @@
 package com.stripe.android.model
 
 import android.net.Uri
-import com.stripe.android.model.StripeJsonUtils.optMap
-import com.stripe.android.model.StripeJsonUtils.optString
-import org.json.JSONException
+import com.stripe.android.model.parsers.SetupIntentJsonParser
+import java.util.regex.Pattern
+import kotlinx.android.parcel.Parcelize
+import kotlinx.android.parcel.RawValue
 import org.json.JSONObject
 
 /**
  * A SetupIntent guides you through the process of setting up a customer's payment credentials for
  * future payments.
  */
-data class SetupIntent private constructor(
+@Parcelize
+data class SetupIntent internal constructor(
 
     /**
      * @return Unique identifier for the object.
@@ -50,7 +52,7 @@ data class SetupIntent private constructor(
      */
     override val isLiveMode: Boolean,
 
-    private val nextAction: Map<String, Any?>?,
+    private val nextAction: Map<String, @RawValue Any?>?,
 
     override val nextActionType: StripeIntent.NextActionType? = null,
 
@@ -84,7 +86,7 @@ data class SetupIntent private constructor(
      * @return The error encountered in the previous SetupIntent confirmation.
      */
     val lastSetupError: Error?
-) : StripeModel(), StripeIntent {
+) : StripeModel, StripeIntent {
 
     override val redirectData: StripeIntent.RedirectData?
         get() {
@@ -137,7 +139,8 @@ data class SetupIntent private constructor(
      *
      * See [last_setup_error](https://stripe.com/docs/api/setup_intents/object#setup_intent_object-last_setup_error).
      */
-    data class Error private constructor(
+    @Parcelize
+    data class Error internal constructor(
 
         /**
          * For some errors that could be handled programmatically, a short string indicating the
@@ -179,7 +182,7 @@ data class SetupIntent private constructor(
          * The type of error returned.
          */
         val type: Type?
-    ) {
+    ) : StripeModel {
         enum class Type(val code: String) {
             ApiConnectionError("api_connection_error"),
             ApiError("api_error"),
@@ -195,33 +198,21 @@ data class SetupIntent private constructor(
                 }
             }
         }
+    }
 
-        companion object {
-            private const val FIELD_CODE = "code"
-            private const val FIELD_DECLINE_CODE = "decline_code"
-            private const val FIELD_DOC_URL = "doc_url"
-            private const val FIELD_MESSAGE = "message"
-            private const val FIELD_PARAM = "param"
-            private const val FIELD_PAYMENT_METHOD = "payment_method"
-            private const val FIELD_TYPE = "type"
+    internal data class ClientSecret(internal val value: String) {
+        internal val setupIntentId: String =
+            value.split("_secret".toRegex())
+                .dropLastWhile { it.isEmpty() }.toTypedArray()[0]
 
-            internal fun fromJson(errorJson: JSONObject?): Error? {
-                return if (errorJson == null) {
-                    null
-                } else {
-                    Error(
-                        code = optString(errorJson, FIELD_CODE),
-                        declineCode = optString(errorJson, FIELD_DECLINE_CODE),
-                        docUrl = optString(errorJson, FIELD_DOC_URL),
-                        message = optString(errorJson, FIELD_MESSAGE),
-                        param = optString(errorJson, FIELD_PARAM),
-                        paymentMethod = PaymentMethod.fromJson(
-                            errorJson.optJSONObject(FIELD_PAYMENT_METHOD)
-                        ),
-                        type = Type.fromCode(optString(errorJson, FIELD_TYPE))
-                    )
-                }
+        init {
+            require(PATTERN.matcher(value).matches()) {
+                "Invalid client secret: $value"
             }
+        }
+
+        private companion object {
+            private val PATTERN = Pattern.compile("^seti_(\\w)+_secret_(\\w)+$")
         }
     }
 
@@ -238,75 +229,13 @@ data class SetupIntent private constructor(
     }
 
     companion object {
-        private const val VALUE_SETUP_INTENT = "setup_intent"
-
-        private const val FIELD_ID = "id"
-        private const val FIELD_OBJECT = "object"
-        private const val FIELD_CANCELLATION_REASON = "cancellation_reason"
-        private const val FIELD_CREATED = "created"
-        private const val FIELD_CLIENT_SECRET = "client_secret"
-        private const val FIELD_DESCRIPTION = "description"
-        private const val FIELD_LAST_SETUP_ERROR = "last_setup_error"
-        private const val FIELD_LIVEMODE = "livemode"
-        private const val FIELD_NEXT_ACTION = "next_action"
-        private const val FIELD_PAYMENT_METHOD_TYPES = "payment_method_types"
-        private const val FIELD_STATUS = "status"
-        private const val FIELD_USAGE = "usage"
-        private const val FIELD_PAYMENT_METHOD = "payment_method"
-
         private const val FIELD_NEXT_ACTION_TYPE = "type"
-
-        internal fun parseIdFromClientSecret(clientSecret: String): String {
-            return clientSecret.split("_secret".toRegex())
-                .dropLastWhile { it.isEmpty() }.toTypedArray()[0]
-        }
-
-        @JvmStatic
-        fun fromString(jsonString: String?): SetupIntent? {
-            return if (jsonString == null) {
-                null
-            } else {
-                try {
-                    fromJson(JSONObject(jsonString))
-                } catch (ignored: JSONException) {
-                    null
-                }
-            }
-        }
 
         @JvmStatic
         fun fromJson(jsonObject: JSONObject?): SetupIntent? {
-            val objectType = optString(jsonObject, FIELD_OBJECT)
-            if (jsonObject == null || VALUE_SETUP_INTENT != objectType) {
-                return null
+            return jsonObject?.let {
+                SetupIntentJsonParser().parse(it)
             }
-
-            val nextAction = optMap(jsonObject, FIELD_NEXT_ACTION)
-            val nextActionType = nextAction?.let {
-                StripeIntent.NextActionType.fromCode(it[FIELD_NEXT_ACTION_TYPE] as String?)
-            }
-            return SetupIntent(
-                id = optString(jsonObject, FIELD_ID),
-                objectType = objectType,
-                created = jsonObject.optLong(FIELD_CREATED),
-                clientSecret = optString(jsonObject, FIELD_CLIENT_SECRET),
-                cancellationReason = CancellationReason.fromCode(
-                    optString(jsonObject, FIELD_CANCELLATION_REASON)
-                ),
-                description = optString(jsonObject, FIELD_DESCRIPTION),
-                isLiveMode = jsonObject.optBoolean(FIELD_LIVEMODE),
-                paymentMethodId = optString(jsonObject, FIELD_PAYMENT_METHOD),
-                paymentMethodTypes = jsonArrayToList(
-                    jsonObject.optJSONArray(FIELD_PAYMENT_METHOD_TYPES)
-                ),
-                status = StripeIntent.Status.fromCode(optString(jsonObject, FIELD_STATUS)),
-                usage = StripeIntent.Usage.fromCode(optString(jsonObject, FIELD_USAGE)),
-                nextAction = nextAction,
-                nextActionType = nextActionType,
-                lastSetupError = Error.fromJson(
-                    jsonObject.optJSONObject(FIELD_LAST_SETUP_ERROR)
-                )
-            )
         }
     }
 }

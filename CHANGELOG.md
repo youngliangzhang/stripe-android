@@ -1,5 +1,86 @@
 # CHANGELOG
 
+## 12.8.0 - 2019-12-17
+* [#1947](https://github.com/stripe/stripe-android/pull/1947) Allow setting of window flags on Stripe Activities
+    * Basic Integration
+      ```
+      PaymentSessionConfig.Builder()
+          .setWindowFlags(WindowManager.LayoutParams.FLAG_SECURE)
+          .build()
+      ```
+
+    * Custom Integration
+      ```
+      AddPaymentMethodActivityStarter.Args.Builder()
+          .setWindowFlags(WindowManager.LayoutParams.FLAG_SECURE)
+          .build()
+      ```
+* [#1956](https://github.com/stripe/stripe-android/pull/1956) Add support for configuring billing address fields on `AddPaymentMethodActivity`
+    * Basic Integration
+      ```
+      PaymentSessionConfig.Builder()
+          .setBillingAddressFields(BillingAddressFields.Full)
+          .build()
+      ```
+
+    * Custom Integration
+      ```
+      AddPaymentMethodActivityStarter.Args.Builder()
+          .setBillingAddressFields(BillingAddressFields.Full)
+          .build()
+      ```
+* [#1957](https://github.com/stripe/stripe-android/pull/1957) Enable `PaymentSessionConfig.ShippingInformationValidator` and `PaymentSessionConfig.ShippingMethodsFactory`
+* [#1958](https://github.com/stripe/stripe-android/pull/1958) Add validation for PaymentIntent and SetupIntent client secrets
+* [#1959](https://github.com/stripe/stripe-android/pull/1959) Upgrade 3DS2 SDK to `2.2.6`
+
+## 12.7.0 - 2019-12-16
+* [#1915](https://github.com/stripe/stripe-android/pull/1915) Update API version to [2019-12-03](https://stripe.com/docs/upgrades#2019-12-03)
+* [#1928](https://github.com/stripe/stripe-android/pull/1928) Make Payment Method `Wallet` a sealed class
+* [#1930](https://github.com/stripe/stripe-android/pull/1930) Update text size for `CardInputWidget` fields
+* [#1939](https://github.com/stripe/stripe-android/pull/1939) Update Android Gradle Plugin to `3.5.3`
+* [#1946](https://github.com/stripe/stripe-android/pull/1946) Upgrade 3DS2 SDK to `2.2.5`
+    * Upgrade to `com.google.android.material:material:1.2.0-alpha2`
+* [#1949](https://github.com/stripe/stripe-android/pull/1949) Catch `NullPointerException` when calling `StripeEditText.setHint()`.
+  This is a workaround for a [known issue on some Samsung devices](https://issuetracker.google.com/issues/37127697).
+* [#1951](https://github.com/stripe/stripe-android/pull/1951) Expose ability to enable postal code on `CardInputWidget`
+    * Enable via layout
+      ```
+        <com.stripe.android.view.CardInputWidget
+            android:id="@+id/card_input_widget"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:shouldShowPostalCode="true" />
+      ```
+    * Enable via code
+      * Java: `cardInputWidget.setPostalCodeEnabled(true)`
+      * Kotlin: `cardInputWidget.postalCodeEnabled = true`
+
+## 12.6.1 - 2019-12-02
+* [#1897](https://github.com/stripe/stripe-android/pull/1897) Upgrade 3DS2 SDK to `2.2.4`
+    * Fix crash when using Instant App
+
+## 12.6.0 - 2019-11-27
+* [#1859](https://github.com/stripe/stripe-android/pull/1859) Create `GooglePayJsonFactory`, a factory for generating Google Pay JSON request objects
+* [#1860](https://github.com/stripe/stripe-android/pull/1860) Namespace drawables with `stripe_` prefix
+* [#1861](https://github.com/stripe/stripe-android/pull/1861) Create `GooglePayResult` to parse and model Google Pay Payment Data response
+* [#1863](https://github.com/stripe/stripe-android/pull/1863) Complete migration of SDK code to Kotlin 🎉
+* [#1864](https://github.com/stripe/stripe-android/pull/1864) Make Klarna Source creation methods public and create example
+    * See `SourceParams.createKlarna()`
+* [#1865](https://github.com/stripe/stripe-android/pull/1865) Make all model classes implement `Parcelable`
+* [#1871](https://github.com/stripe/stripe-android/pull/1871) Simplify configuration of example app
+    * Example app can be configured via `$HOME/.gradle/gradle.properties` instead of `Settings.kt` 
+      ```
+      STRIPE_EXAMPLE_BACKEND_URL=https://hidden-beach-12345.herokuapp.com/
+      STRIPE_EXAMPLE_PUBLISHABLE_KEY=pk_test_12345
+      STRIPE_ACCOUNT_ID=
+      ```
+* [#1883](https://github.com/stripe/stripe-android/pull/1883) Enable `PaymentSessionConfig.ShippingInformationValidator` and `PaymentSessionConfig.ShippingMethodsFactory`
+    * See the [Migration Guide](https://github.com/stripe/stripe-android/blob/master/MIGRATING.md) for an example of how to use the new interfaces
+* [#1884](https://github.com/stripe/stripe-android/pull/1884) Mark `PaymentFlowExtras` as deprecated
+* [#1885](https://github.com/stripe/stripe-android/pull/1885) Create `Stripe#retrieveSource()` for asynchronous `Source` retrieval
+* [#1890](https://github.com/stripe/stripe-android/pull/1890) Upgrade 3DS2 SDK to 2.2.3
+    * Fix crash when using Instant App
+
 ## 12.5.0 - 2019-11-21
 * [#1836](https://github.com/stripe/stripe-android/pull/1836) Add support for [statement_descriptor](https://stripe.com/docs/api/sources/object#source_object-statement_descriptor) field to `Source` model via `Source#statementDescriptor`
 * [#1837](https://github.com/stripe/stripe-android/pull/1837) Add support for [source_order](https://stripe.com/docs/api/sources/create#create_source-source_order) param via `SourceOrderParams`

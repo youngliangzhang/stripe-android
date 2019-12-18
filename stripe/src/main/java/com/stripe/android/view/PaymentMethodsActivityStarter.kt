@@ -41,40 +41,51 @@ class PaymentMethodsActivityStarter : ActivityStarter<PaymentMethodsActivity, Ar
     data class Args internal constructor(
         internal val initialPaymentMethodId: String?,
         val shouldRequirePostalCode: Boolean,
-        @LayoutRes val addPaymentMethodFooter: Int,
+        @LayoutRes val addPaymentMethodFooterLayoutId: Int,
         internal val isPaymentSessionActive: Boolean,
         internal val paymentMethodTypes: List<PaymentMethod.Type>,
-        internal val paymentConfiguration: PaymentConfiguration?
+        internal val paymentConfiguration: PaymentConfiguration?,
+        internal val windowFlags: Int? = null,
+        internal val billingAddressFields: BillingAddressFields
     ) : ActivityStarter.Args {
         class Builder : ObjectBuilder<Args> {
+            private var billingAddressFields: BillingAddressFields = BillingAddressFields.None
             private var initialPaymentMethodId: String? = null
             private var shouldRequirePostalCode = false
             private var isPaymentSessionActive = false
             private var paymentMethodTypes: List<PaymentMethod.Type>? = null
             private var paymentConfiguration: PaymentConfiguration? = null
             @LayoutRes
-            private var addPaymentMethodFooter: Int = 0
+            private var addPaymentMethodFooterLayoutId: Int = 0
+            private var windowFlags: Int? = null
 
-            fun setInitialPaymentMethodId(initialPaymentMethodId: String?): Builder {
+            /**
+             * @param billingAddressFields the billing address fields to require on [AddPaymentMethodActivity]
+             */
+            fun setBillingAddressFields(
+                billingAddressFields: BillingAddressFields
+            ): Builder = apply {
+                this.billingAddressFields = billingAddressFields
+            }
+
+            fun setInitialPaymentMethodId(initialPaymentMethodId: String?): Builder = apply {
                 this.initialPaymentMethodId = initialPaymentMethodId
-                return this
             }
 
-            fun setShouldRequirePostalCode(shouldRequirePostalCode: Boolean): Builder {
+            @Deprecated("Use setBillingAddressFields()",
+                ReplaceWith("setBillingAddressFields(BillingAddressFields.PostalCode"))
+            fun setShouldRequirePostalCode(shouldRequirePostalCode: Boolean): Builder = apply {
                 this.shouldRequirePostalCode = shouldRequirePostalCode
-                return this
             }
 
-            fun setIsPaymentSessionActive(isPaymentSessionActive: Boolean): Builder {
+            fun setIsPaymentSessionActive(isPaymentSessionActive: Boolean): Builder = apply {
                 this.isPaymentSessionActive = isPaymentSessionActive
-                return this
             }
 
             fun setPaymentConfiguration(
                 paymentConfiguration: PaymentConfiguration?
-            ): Builder {
+            ): Builder = apply {
                 this.paymentConfiguration = paymentConfiguration
-                return this
             }
 
             /**
@@ -90,14 +101,27 @@ class PaymentMethodsActivityStarter : ActivityStarter<PaymentMethodsActivity, Ar
              */
             fun setPaymentMethodTypes(
                 paymentMethodTypes: List<PaymentMethod.Type>
-            ): Builder {
+            ): Builder = apply {
                 this.paymentMethodTypes = paymentMethodTypes
-                return this
             }
 
-            fun setAddPaymentMethodFooter(@LayoutRes addPaymentMethodFooter: Int): Builder {
-                this.addPaymentMethodFooter = addPaymentMethodFooter
-                return this
+            /**
+             * @param addPaymentMethodFooterLayoutId optional layout id that will be inflated and
+             * displayed beneath the payment details collection form on [AddPaymentMethodActivity]
+             */
+            fun setAddPaymentMethodFooter(
+                @LayoutRes addPaymentMethodFooterLayoutId: Int
+            ): Builder = apply {
+                this.addPaymentMethodFooterLayoutId = addPaymentMethodFooterLayoutId
+            }
+
+            /**
+             * @param windowFlags optional flags to set on the `Window` object of Stripe Activities
+             *
+             * See [WindowManager.LayoutParams](https://developer.android.com/reference/android/view/WindowManager.LayoutParams)
+             */
+            fun setWindowFlags(windowFlags: Int?): Builder = apply {
+                this.windowFlags = windowFlags
             }
 
             override fun build(): Args {
@@ -107,7 +131,9 @@ class PaymentMethodsActivityStarter : ActivityStarter<PaymentMethodsActivity, Ar
                     isPaymentSessionActive = isPaymentSessionActive,
                     paymentMethodTypes = paymentMethodTypes ?: listOf(PaymentMethod.Type.Card),
                     paymentConfiguration = paymentConfiguration,
-                    addPaymentMethodFooter = addPaymentMethodFooter
+                    addPaymentMethodFooterLayoutId = addPaymentMethodFooterLayoutId,
+                    windowFlags = windowFlags,
+                    billingAddressFields = billingAddressFields
                 )
             }
         }

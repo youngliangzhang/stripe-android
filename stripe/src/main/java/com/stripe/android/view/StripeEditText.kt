@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.os.Handler
 import android.text.Editable
-import android.text.TextWatcher
 import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
@@ -133,15 +132,34 @@ open class StripeEditText @JvmOverloads constructor(
     /**
      * Change the hint value of this control after a delay.
      *
-     * @param hintResource the string resource for the hint to be set
+     * @param hintResource the string resource for the hint text
      * @param delayMilliseconds a delay period, measured in milliseconds
      */
     fun setHintDelayed(@StringRes hintResource: Int, delayMilliseconds: Long) {
-        hintHandler.postDelayed({ setHint(hintResource) }, delayMilliseconds)
+        setHintDelayed(resources.getText(hintResource), delayMilliseconds)
     }
 
-    fun setHintDelayed(hint: String, delayMilliseconds: Long) {
-        hintHandler.postDelayed({ setHint(hint) }, delayMilliseconds)
+    /**
+     * Change the hint value of this control after a delay.
+     *
+     * @param hint the hint text
+     * @param delayMilliseconds a delay period, measured in milliseconds
+     */
+    fun setHintDelayed(hint: CharSequence, delayMilliseconds: Long) {
+        hintHandler.postDelayed({
+            setHintSafely(hint)
+        }, delayMilliseconds)
+    }
+
+    /**
+     * Call setHint() and guard against NPE. This is a workaround for a
+     * [known issue on Samsung devices](https://issuetracker.google.com/issues/37127697).
+     */
+    private fun setHintSafely(hint: CharSequence) {
+        try {
+            setHint(hint)
+        } catch (e: NullPointerException) {
+        }
     }
 
     override fun onDetachedFromWindow() {
@@ -172,17 +190,9 @@ open class StripeEditText @JvmOverloads constructor(
     }
 
     private fun listenForTextChanges() {
-        addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) {
-                // purposefully not implemented.
-            }
-
-            override fun onTextChanged(s: CharSequence, start: Int, before: Int, count: Int) {
-                // purposefully not implemented.
-            }
-
-            override fun afterTextChanged(s: Editable) {
-                afterTextChangedListener?.onTextChanged(s.toString())
+        addTextChangedListener(object : StripeTextWatcher() {
+            override fun afterTextChanged(s: Editable?) {
+                afterTextChangedListener?.onTextChanged(s?.toString().orEmpty())
             }
         })
     }

@@ -6,6 +6,10 @@ import androidx.annotation.WorkerThread
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.ShippingInformation
 import com.stripe.android.model.ShippingMethod
+import com.stripe.android.view.AddPaymentMethodActivity
+import com.stripe.android.view.BillingAddressFields
+import com.stripe.android.view.PaymentFlowActivity
+import com.stripe.android.view.PaymentFlowExtras
 import com.stripe.android.view.SelectShippingMethodWidget
 import com.stripe.android.view.ShippingInfoWidget
 import com.stripe.android.view.ShippingInfoWidget.CustomizableShippingField
@@ -23,15 +27,16 @@ data class PaymentSessionConfig internal constructor(
     val prepopulatedShippingInfo: ShippingInformation? = null,
     val isShippingInfoRequired: Boolean = false,
     val isShippingMethodRequired: Boolean = false,
-
     @LayoutRes
     @get:LayoutRes
-    val addPaymentMethodFooter: Int = 0,
-
+    val addPaymentMethodFooterLayoutId: Int = 0,
     val paymentMethodTypes: List<PaymentMethod.Type> = listOf(PaymentMethod.Type.Card),
     val allowedShippingCountryCodes: Set<String> = emptySet(),
+    val billingAddressFields: BillingAddressFields = BillingAddressFields.None,
+
     internal val shippingInformationValidator: ShippingInformationValidator? = null,
-    internal val shippingMethodsFactory: ShippingMethodsFactory? = null
+    internal val shippingMethodsFactory: ShippingMethodsFactory? = null,
+    internal val windowFlags: Int? = null
 ) : Parcelable {
     init {
         val countryCodes = Locale.getISOCountries()
@@ -42,9 +47,18 @@ data class PaymentSessionConfig internal constructor(
                 "'$allowedShippingCountryCode' is not a valid country code"
             }
         }
+
+        if (shippingInformationValidator != null && isShippingMethodRequired) {
+            requireNotNull(shippingMethodsFactory) {
+                """
+                If isShippingMethodRequired is true and a ShippingInformationValidator is provided,
+                a ShippingMethodsFactory must also be provided.
+                """.trimIndent()
+            }
+        }
     }
 
-    internal interface ShippingInformationValidator : Serializable {
+    interface ShippingInformationValidator : Serializable {
         /**
          * @return whether the customer's [ShippingInformation] is valid. Will run on
          * a background thread.
@@ -60,7 +74,7 @@ data class PaymentSessionConfig internal constructor(
         fun getErrorMessage(shippingInformation: ShippingInformation): String
     }
 
-    internal interface ShippingMethodsFactory : Serializable {
+    interface ShippingMethodsFactory : Serializable {
         /**
          * @return a list of [ShippingMethod] options to present to the customer. Will run on
          * a background thread.
@@ -72,6 +86,7 @@ data class PaymentSessionConfig internal constructor(
     }
 
     class Builder : ObjectBuilder<PaymentSessionConfig> {
+        private var billingAddressFields: BillingAddressFields = BillingAddressFields.None
         private var shippingInfoRequired = true
         private var shippingMethodsRequired = true
         private var hiddenShippingInfoFields: List<String>? = null
@@ -79,9 +94,21 @@ data class PaymentSessionConfig internal constructor(
         private var shippingInformation: ShippingInformation? = null
         private var paymentMethodTypes: List<PaymentMethod.Type> = listOf(PaymentMethod.Type.Card)
         private var allowedShippingCountryCodes: Set<String> = emptySet()
+        private var shippingInformationValidator: ShippingInformationValidator? = null
+        private var shippingMethodsFactory: ShippingMethodsFactory? = null
+        private var windowFlags: Int? = null
 
         @LayoutRes
-        private var addPaymentMethodFooter: Int = 0
+        private var addPaymentMethodFooterLayoutId: Int = 0
+
+        /**
+         * @param billingAddressFields the billing address fields to require on [AddPaymentMethodActivity]
+         */
+        fun setBillingAddressFields(
+            billingAddressFields: BillingAddressFields
+        ): Builder = apply {
+            this.billingAddressFields = billingAddressFields
+        }
 
         /**
          * @param hiddenShippingInfoFields [CustomizableShippingField] fields that should be
@@ -90,9 +117,8 @@ data class PaymentSessionConfig internal constructor(
          */
         fun setHiddenShippingInfoFields(
             @CustomizableShippingField vararg hiddenShippingInfoFields: String
-        ): Builder {
+        ): Builder = apply {
             this.hiddenShippingInfoFields = listOf(*hiddenShippingInfoFields)
-            return this
         }
 
         /**
@@ -101,17 +127,15 @@ data class PaymentSessionConfig internal constructor(
          */
         fun setOptionalShippingInfoFields(
             @CustomizableShippingField vararg optionalShippingInfoFields: String
-        ): Builder {
+        ): Builder = apply {
             this.optionalShippingInfoFields = listOf(*optionalShippingInfoFields)
-            return this
         }
 
         /**
          * @param shippingInfo [ShippingInformation] that will pre-populate the [ShippingInfoWidget]
          */
-        fun setPrepopulatedShippingInfo(shippingInfo: ShippingInformation?): Builder {
+        fun setPrepopulatedShippingInfo(shippingInfo: ShippingInformation?): Builder = apply {
             shippingInformation = shippingInfo
-            return this
         }
 
         /**
@@ -120,26 +144,28 @@ data class PaymentSessionConfig internal constructor(
          *
          * Default is `true`.
          */
-        fun setShippingInfoRequired(shippingInfoRequired: Boolean): Builder {
+        fun setShippingInfoRequired(shippingInfoRequired: Boolean): Builder = apply {
             this.shippingInfoRequired = shippingInfoRequired
-            return this
         }
 
         /**
-         * @param shippingMethodsRequired whether a [com.stripe.android.model.ShippingMethod]
-         * should be required. If it is required, a screen with a [SelectShippingMethodWidget]
-         * is shown to collect it.
+         * @param shippingMethodsRequired whether a [ShippingMethod] should be required.
+         * If it is required, a screen with a [SelectShippingMethodWidget] is shown to collect it.
          *
          * Default is `true`.
          */
-        fun setShippingMethodsRequired(shippingMethodsRequired: Boolean): Builder {
+        fun setShippingMethodsRequired(shippingMethodsRequired: Boolean): Builder = apply {
             this.shippingMethodsRequired = shippingMethodsRequired
-            return this
         }
 
-        fun setAddPaymentMethodFooter(@LayoutRes addPaymentMethodFooterLayoutId: Int): Builder {
-            this.addPaymentMethodFooter = addPaymentMethodFooterLayoutId
-            return this
+        /**
+         * @param addPaymentMethodFooterLayoutId optional layout id that will be inflated and
+         * displayed beneath the payment details collection form on [AddPaymentMethodActivity]
+         */
+        fun setAddPaymentMethodFooter(
+            @LayoutRes addPaymentMethodFooterLayoutId: Int
+        ): Builder = apply {
+            this.addPaymentMethodFooterLayoutId = addPaymentMethodFooterLayoutId
         }
 
         /**
@@ -153,9 +179,8 @@ data class PaymentSessionConfig internal constructor(
          * Currently only [PaymentMethod.Type.Card] and [PaymentMethod.Type.Fpx] are supported.
          * If not specified or empty, [PaymentMethod.Type.Card] will be used.
          */
-        fun setPaymentMethodTypes(paymentMethodTypes: List<PaymentMethod.Type>): Builder {
+        fun setPaymentMethodTypes(paymentMethodTypes: List<PaymentMethod.Type>): Builder = apply {
             this.paymentMethodTypes = paymentMethodTypes
-            return this
         }
 
         /**
@@ -164,9 +189,43 @@ data class PaymentSessionConfig internal constructor(
          */
         fun setAllowedShippingCountryCodes(
             allowedShippingCountryCodes: Set<String>
-        ): Builder {
+        ): Builder = apply {
             this.allowedShippingCountryCodes = allowedShippingCountryCodes
-            return this
+        }
+
+        /**
+         * @param windowFlags optional flags to set on the `Window` object of Stripe Activities
+         *
+         * See [WindowManager.LayoutParams](https://developer.android.com/reference/android/view/WindowManager.LayoutParams)
+         */
+        fun setWindowFlags(windowFlags: Int?): Builder = apply {
+            this.windowFlags = windowFlags
+        }
+
+        /**
+         * @param shippingInformationValidator if specified, will be used to validate
+         * [ShippingInformation] in [PaymentFlowActivity] instead of sending a broadcast with
+         * [PaymentFlowExtras.EVENT_SHIPPING_INFO_SUBMITTED].
+         *
+         * Note: this instance must be [Serializable].
+         */
+        fun setShippingInformationValidator(
+            shippingInformationValidator: ShippingInformationValidator?
+        ): Builder = apply {
+            this.shippingInformationValidator = shippingInformationValidator
+        }
+
+        /**
+         * @param shippingMethodsFactory required if [shippingInformationValidator] is specified
+         * and [shippingMethodsRequired] is `true`. Used to create the [ShippingMethod] options
+         * to be displayed in [PaymentFlowActivity].
+         *
+         * Note: this instance must be [Serializable].
+         */
+        fun setShippingMethodsFactory(
+            shippingMethodsFactory: ShippingMethodsFactory?
+        ): Builder = apply {
+            this.shippingMethodsFactory = shippingMethodsFactory
         }
 
         override fun build(): PaymentSessionConfig {
@@ -176,9 +235,13 @@ data class PaymentSessionConfig internal constructor(
                 prepopulatedShippingInfo = shippingInformation,
                 isShippingInfoRequired = shippingInfoRequired,
                 isShippingMethodRequired = shippingMethodsRequired,
-                addPaymentMethodFooter = addPaymentMethodFooter,
+                addPaymentMethodFooterLayoutId = addPaymentMethodFooterLayoutId,
                 paymentMethodTypes = paymentMethodTypes,
-                allowedShippingCountryCodes = allowedShippingCountryCodes
+                allowedShippingCountryCodes = allowedShippingCountryCodes,
+                shippingInformationValidator = shippingInformationValidator,
+                shippingMethodsFactory = shippingMethodsFactory,
+                windowFlags = windowFlags,
+                billingAddressFields = billingAddressFields
             )
         }
     }

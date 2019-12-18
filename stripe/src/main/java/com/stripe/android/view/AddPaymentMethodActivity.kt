@@ -3,24 +3,20 @@ package com.stripe.android.view
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.os.IBinder
 import android.text.method.LinkMovementMethod
 import android.text.util.Linkify
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.widget.TextView
 import androidx.annotation.StringRes
 import androidx.core.text.util.LinkifyCompat
-import com.stripe.android.ApiResultCallback
+import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProviders
 import com.stripe.android.CustomerSession
 import com.stripe.android.PaymentConfiguration
-import com.stripe.android.PaymentSession.Companion.TOKEN_PAYMENT_SESSION
 import com.stripe.android.R
 import com.stripe.android.Stripe
-import com.stripe.android.StripeError
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.PaymentMethodCreateParams
-import java.lang.ref.WeakReference
 
 /**
  * Activity used to display a [AddPaymentMethodView] and receive the resulting
@@ -31,11 +27,38 @@ import java.lang.ref.WeakReference
  * Should be started with [AddPaymentMethodActivityStarter].
  */
 class AddPaymentMethodActivity : StripeActivity() {
-    private lateinit var stripe: Stripe
-    private var addPaymentMethodView: AddPaymentMethodView? = null
-    private var paymentMethodType: PaymentMethod.Type? = null
-    private var startedFromPaymentSession: Boolean = false
-    private var shouldAttachToCustomer: Boolean = false
+
+    private val args: AddPaymentMethodActivityStarter.Args by lazy {
+        AddPaymentMethodActivityStarter.Args.create(intent)
+    }
+
+    private val stripe: Stripe by lazy {
+        val paymentConfiguration = args.paymentConfiguration
+            ?: PaymentConfiguration.getInstance(this)
+        Stripe(applicationContext, paymentConfiguration.publishableKey)
+    }
+
+    private val paymentMethodType: PaymentMethod.Type by lazy {
+        args.paymentMethodType
+    }
+
+    private val shouldAttachToCustomer: Boolean by lazy {
+        paymentMethodType.isReusable && args.shouldAttachToCustomer
+    }
+
+    private val addPaymentMethodView: AddPaymentMethodView by lazy {
+        createPaymentMethodView(args)
+    }
+
+    private val customerSession: CustomerSession by lazy {
+        CustomerSession.getInstance()
+    }
+
+    private val viewModel: AddPaymentMethodViewModel by lazy {
+        ViewModelProviders.of(this, AddPaymentMethodViewModel.Factory(
+            stripe, customerSession, args
+        ))[AddPaymentMethodViewModel::class.java]
+    }
 
     private val titleStringRes: Int
         @StringRes
@@ -49,44 +72,37 @@ class AddPaymentMethodActivity : StripeActivity() {
                 }
                 else -> {
                     throw IllegalArgumentException(
-                        "Unsupported Payment Method type: ${paymentMethodType?.code}")
+                        "Unsupported Payment Method type: ${paymentMethodType.code}")
                 }
             }
         }
 
-    internal val windowToken: IBinder?
-        get() = viewStub.windowToken
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val args = AddPaymentMethodActivityStarter.Args.create(intent)
-        val paymentConfiguration = args.paymentConfiguration
-            ?: PaymentConfiguration.getInstance(this)
-        stripe = Stripe(applicationContext, paymentConfiguration.publishableKey)
-        paymentMethodType = args.paymentMethodType
-
         configureView(args)
+        viewModel.logProductUsage()
+    }
 
-        shouldAttachToCustomer = paymentMethodType?.isReusable == true &&
-            args.shouldAttachToCustomer
-        startedFromPaymentSession = args.isPaymentSessionActive
-
-        if (shouldAttachToCustomer && args.shouldInitCustomerSessionTokens) {
-            initCustomerSessionTokens(CustomerSession.getInstance())
-        }
+    override fun onResume() {
+        super.onResume()
+        addPaymentMethodView.requestFocus()
     }
 
     private fun configureView(args: AddPaymentMethodActivityStarter.Args) {
+        args.windowFlags?.let {
+            window.addFlags(it)
+        }
+
         viewStub.layoutResource = R.layout.add_payment_method_layout
         val scrollView = viewStub.inflate() as ViewGroup
-        val contentRoot = scrollView.findViewById<ViewGroup>(R.id.stripe_add_payment_method_content_root)
-
-        addPaymentMethodView = createPaymentMethodView(args)
+        val contentRoot: ViewGroup =
+            scrollView.findViewById(R.id.stripe_add_payment_method_content_root)
         contentRoot.addView(addPaymentMethodView)
 
-        if (args.addPaymentMethodFooter > 0) {
-            val footerView = layoutInflater.inflate(args.addPaymentMethodFooter, contentRoot, false)
+        if (args.addPaymentMethodFooterLayoutId > 0) {
+            val footerView = layoutInflater.inflate(
+                args.addPaymentMethodFooterLayoutId, contentRoot, false
+            )
             if (footerView is TextView) {
                 LinkifyCompat.addLinks(footerView, Linkify.ALL)
                 footerView.movementMethod = LinkMovementMethod.getInstance()
@@ -95,10 +111,6 @@ class AddPaymentMethodActivity : StripeActivity() {
         }
 
         setTitle(titleStringRes)
-
-        if (paymentMethodType == PaymentMethod.Type.Card) {
-            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
-        }
     }
 
     private fun createPaymentMethodView(
@@ -106,45 +118,67 @@ class AddPaymentMethodActivity : StripeActivity() {
     ): AddPaymentMethodView {
         return when (paymentMethodType) {
             PaymentMethod.Type.Card -> {
-                AddPaymentMethodCardView.create(this, args.shouldRequirePostalCode, args.shouldUseUSPostalCode)
+                AddPaymentMethodCardView(
+                    context = this,
+                    billingAddressFields = args.billingAddressFields,
+                    shouldUseUSPostalCode = args.shouldUseUSPostalCode
+                )
             }
             PaymentMethod.Type.Fpx -> {
                 AddPaymentMethodFpxView.create(this)
             }
             else -> {
                 throw IllegalArgumentException(
-                    "Unsupported Payment Method type: ${paymentMethodType?.code}")
+                    "Unsupported Payment Method type: ${paymentMethodType.code}")
             }
         }
     }
 
-    @JvmSynthetic
-    internal fun initCustomerSessionTokens(customerSession: CustomerSession) {
-        customerSession.addProductUsageTokenIfValid(TOKEN_ADD_PAYMENT_METHOD_ACTIVITY)
-        if (startedFromPaymentSession) {
-            customerSession.addProductUsageTokenIfValid(TOKEN_PAYMENT_SESSION)
-        }
-    }
-
     public override fun onActionSave() {
-        createPaymentMethod(stripe, addPaymentMethodView?.createParams)
+        createPaymentMethod(viewModel, addPaymentMethodView.createParams)
     }
 
-    fun createPaymentMethod(stripe: Stripe, params: PaymentMethodCreateParams?) {
+    internal fun createPaymentMethod(
+        viewModel: AddPaymentMethodViewModel,
+        params: PaymentMethodCreateParams?
+    ) {
         if (params == null) {
             return
         }
 
         setCommunicatingProgress(true)
-        stripe.createPaymentMethod(params,
-            PaymentMethodCallbackImpl(this, shouldAttachToCustomer))
+
+        viewModel.createPaymentMethod(params).observe(this, Observer {
+            when (it) {
+                is AddPaymentMethodViewModel.PaymentMethodResult.Success -> {
+                    if (shouldAttachToCustomer) {
+                        attachPaymentMethodToCustomer(it.paymentMethod)
+                    } else {
+                        finishWithPaymentMethod(it.paymentMethod)
+                    }
+                }
+                is AddPaymentMethodViewModel.PaymentMethodResult.Error -> {
+                    setCommunicatingProgress(false)
+                    showError(it.errorMessage)
+                }
+            }
+        })
     }
 
     private fun attachPaymentMethodToCustomer(paymentMethod: PaymentMethod) {
-        CustomerSession.getInstance().attachPaymentMethod(
-            requireNotNull(paymentMethod.id),
-            PaymentMethodRetrievalListenerImpl(this)
-        )
+        viewModel.attachPaymentMethod(
+            paymentMethod
+        ).observe(this, Observer {
+            when (it) {
+                is AddPaymentMethodViewModel.PaymentMethodResult.Success -> {
+                    finishWithPaymentMethod(it.paymentMethod)
+                }
+                is AddPaymentMethodViewModel.PaymentMethodResult.Error -> {
+                    setCommunicatingProgress(false)
+                    showError(it.errorMessage)
+                }
+            }
+        })
     }
 
     private fun finishWithPaymentMethod(paymentMethod: PaymentMethod) {
@@ -156,62 +190,7 @@ class AddPaymentMethodActivity : StripeActivity() {
 
     override fun setCommunicatingProgress(communicating: Boolean) {
         super.setCommunicatingProgress(communicating)
-        addPaymentMethodView?.setCommunicatingProgress(communicating)
-    }
-
-    private class PaymentMethodCallbackImpl constructor(
-        activity: AddPaymentMethodActivity,
-        private val updatesCustomer: Boolean
-    ) : ActivityPaymentMethodCallback<AddPaymentMethodActivity>(activity) {
-
-        override fun onError(e: Exception) {
-            activity?.let { activity ->
-                activity.setCommunicatingProgress(false)
-                // This error is independent of the CustomerSession, so we have to surface it here.
-                activity.showError(e.localizedMessage.orEmpty())
-            }
-        }
-
-        override fun onSuccess(result: PaymentMethod) {
-            activity?.let { activity ->
-                if (updatesCustomer) {
-                    activity.attachPaymentMethodToCustomer(result)
-                } else {
-                    activity.finishWithPaymentMethod(result)
-                }
-            }
-        }
-    }
-
-    private class PaymentMethodRetrievalListenerImpl constructor(
-        activity: AddPaymentMethodActivity
-    ) : CustomerSession.ActivityPaymentMethodRetrievalListener<AddPaymentMethodActivity>(activity) {
-        override fun onPaymentMethodRetrieved(paymentMethod: PaymentMethod) {
-            activity?.finishWithPaymentMethod(paymentMethod)
-        }
-
-        override fun onError(
-            errorCode: Int,
-            errorMessage: String,
-            stripeError: StripeError?
-        ) {
-            // No need to show this error, because it will be broadcast
-            // from the CustomerSession
-            activity?.setCommunicatingProgress(false)
-        }
-    }
-
-    /**
-     * Abstract implementation of [ApiResultCallback] that holds a [WeakReference]
-     * to an `Activity` object.
-     */
-    private abstract class ActivityPaymentMethodCallback<A : Activity> internal constructor(
-        activity: A
-    ) : ApiResultCallback<PaymentMethod> {
-        private val activityRef: WeakReference<A> = WeakReference(activity)
-
-        val activity: A?
-            get() = activityRef.get()
+        addPaymentMethodView.setCommunicatingProgress(communicating)
     }
 
     internal companion object {

@@ -2,7 +2,7 @@ package com.stripe.android.model
 
 import androidx.annotation.Size
 import androidx.annotation.StringDef
-import org.json.JSONObject
+import kotlinx.android.parcel.Parcelize
 
 /**
  * Model class representing a bank account that can be used to create a token
@@ -10,6 +10,7 @@ import org.json.JSONObject
  * [the Stripe
  * documentation.](https://stripe.com/docs/api/java#create_bank_account_token)
  */
+@Parcelize
 data class BankAccount internal constructor(
     val accountNumber: String?,
     val accountHolderName: String?,
@@ -23,7 +24,7 @@ data class BankAccount internal constructor(
     val fingerprint: String?,
     val last4: String?,
     val routingNumber: String?
-) : StripeParamsModel {
+) : StripeModel, StripeParamsModel {
 
     @Retention(AnnotationRetention.SOURCE)
     @StringDef(BankAccountType.COMPANY, BankAccountType.INDIVIDUAL)
@@ -90,44 +91,5 @@ data class BankAccount internal constructor(
         )
 
         return mapOf(Token.TokenType.BANK_ACCOUNT to accountParams)
-    }
-
-    companion object {
-        private const val FIELD_ACCOUNT_HOLDER_NAME = "account_holder_name"
-        private const val FIELD_ACCOUNT_HOLDER_TYPE = "account_holder_type"
-        private const val FIELD_BANK_NAME = "bank_name"
-        private const val FIELD_COUNTRY = "country"
-        private const val FIELD_CURRENCY = "currency"
-        private const val FIELD_FINGERPRINT = "fingerprint"
-        private const val FIELD_LAST4 = "last4"
-        private const val FIELD_ROUTING_NUMBER = "routing_number"
-
-        /**
-         * Converts a String value into the appropriate [BankAccountType].
-         *
-         * @param possibleAccountType a String that might match a [BankAccountType] or be empty.
-         * @return `null` if the input is blank or of unknown type, else the appropriate
-         * [BankAccountType].
-         */
-        @BankAccountType
-        fun asBankAccountType(possibleAccountType: String?): String? {
-            return when (possibleAccountType) {
-                BankAccountType.COMPANY -> BankAccountType.COMPANY
-                BankAccountType.INDIVIDUAL -> BankAccountType.INDIVIDUAL
-                else -> null
-            }
-        }
-
-        fun fromJson(jsonObject: JSONObject): BankAccount {
-            return BankAccount(
-                StripeJsonUtils.optString(jsonObject, FIELD_ACCOUNT_HOLDER_NAME),
-                asBankAccountType(StripeJsonUtils.optString(jsonObject, FIELD_ACCOUNT_HOLDER_TYPE)),
-                StripeJsonUtils.optString(jsonObject, FIELD_BANK_NAME),
-                StripeJsonUtils.optCountryCode(jsonObject, FIELD_COUNTRY),
-                StripeJsonUtils.optCurrency(jsonObject, FIELD_CURRENCY),
-                StripeJsonUtils.optString(jsonObject, FIELD_FINGERPRINT),
-                StripeJsonUtils.optString(jsonObject, FIELD_LAST4),
-                StripeJsonUtils.optString(jsonObject, FIELD_ROUTING_NUMBER))
-        }
     }
 }
