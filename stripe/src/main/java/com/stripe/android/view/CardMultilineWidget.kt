@@ -36,7 +36,6 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlin.properties.Delegates
 
-
 /**
  * A multiline card input widget using the support design library's [TextInputLayout]
  * to match Material Design.
