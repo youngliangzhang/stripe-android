@@ -2,6 +2,7 @@ package com.stripe.android.view
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.google.common.truth.Truth.assertThat
 import com.nhaarman.mockitokotlin2.KArgumentCaptor
 import com.nhaarman.mockitokotlin2.any
 import com.nhaarman.mockitokotlin2.anyOrNull
@@ -25,10 +26,7 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class AddPaymentMethodViewModelTest {
-
-    private val context: Context by lazy {
-        ApplicationProvider.getApplicationContext<Context>()
-    }
+    private val context = ApplicationProvider.getApplicationContext<Context>()
 
     private val customerSession: CustomerSession = mock()
     private val paymentMethodRetrievalCaptor: KArgumentCaptor<CustomerSession.PaymentMethodRetrievalListener> = argumentCaptor()
@@ -62,9 +60,12 @@ class AddPaymentMethodViewModelTest {
 
     @Test
     fun attachPaymentMethod_whenError_returnsError() {
-        val resultData =
-            createViewModel()
-                .attachPaymentMethod(PaymentMethodFixtures.CARD_PAYMENT_METHOD)
+        var throwable: Throwable? = null
+        createViewModel()
+            .attachPaymentMethod(PaymentMethodFixtures.CARD_PAYMENT_METHOD).observeForever {
+                throwable = it.exceptionOrNull()
+            }
+
         verify(customerSession).attachPaymentMethod(
             eq("pm_123456789"),
             eq(EXPECTED_PRODUCT_USAGE),
@@ -83,16 +84,18 @@ class AddPaymentMethodViewModelTest {
             )
         )
 
-        val errorResult =
-            resultData.value as AddPaymentMethodViewModel.PaymentMethodResult.Error
-        assertEquals(ERROR_MESSAGE, errorResult.errorMessage)
+        assertThat(throwable?.message)
+            .isEqualTo(ERROR_MESSAGE)
     }
 
     @Test
     fun attachPaymentMethod_withCustomErrorMessageTranslator_whenError_returnsLocalizedError() {
-        val resultData =
-            createViewModel(translator = TRANSLATOR)
-                .attachPaymentMethod(PaymentMethodFixtures.CARD_PAYMENT_METHOD)
+        var throwable: Throwable? = null
+        createViewModel(translator = TRANSLATOR)
+            .attachPaymentMethod(PaymentMethodFixtures.CARD_PAYMENT_METHOD).observeForever {
+                throwable = it.exceptionOrNull()
+            }
+
         verify(customerSession).attachPaymentMethod(
             eq("pm_123456789"),
             eq(EXPECTED_PRODUCT_USAGE),
@@ -111,9 +114,8 @@ class AddPaymentMethodViewModelTest {
             )
         )
 
-        val errorResult =
-            resultData.value as AddPaymentMethodViewModel.PaymentMethodResult.Error
-        assertEquals(ERROR_MESSAGE_LOCALIZED, errorResult.errorMessage)
+        assertThat(throwable?.message)
+            .isEqualTo(ERROR_MESSAGE_LOCALIZED)
     }
 
     private fun createViewModel(
@@ -123,7 +125,7 @@ class AddPaymentMethodViewModelTest {
         return AddPaymentMethodViewModel(
             stripe,
             customerSession,
-            AddPaymentMethodActivityStarter.Args.DEFAULT,
+            AddPaymentMethodActivityStarter.Args.Builder().build(),
             translator
         )
     }

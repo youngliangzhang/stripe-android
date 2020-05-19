@@ -26,7 +26,7 @@ class GooglePayJsonFactoryTest {
                     "type": "CARD",
                     "parameters": {
                         "allowedAuthMethods": ["PAN_ONLY", "CRYPTOGRAM_3DS"],
-                        "allowedCardNetworks": ["AMEX", "DISCOVER", "INTERAC", "MASTERCARD", "VISA"]
+                        "allowedCardNetworks": ["AMEX", "DISCOVER", "MASTERCARD", "VISA"]
                     },
                     "tokenizationSpecification": {
                         "type": "PAYMENT_GATEWAY",
@@ -60,7 +60,7 @@ class GooglePayJsonFactoryTest {
                     "type": "CARD",
                     "parameters": {
                         "allowedAuthMethods": ["PAN_ONLY", "CRYPTOGRAM_3DS"],
-                        "allowedCardNetworks": ["AMEX", "DISCOVER", "INTERAC", "MASTERCARD", "VISA"],
+                        "allowedCardNetworks": ["AMEX", "DISCOVER", "MASTERCARD", "VISA"],
                         "billingAddressRequired": true,
                         "billingAddressParameters": {
                             "phoneNumberRequired": true,
@@ -94,7 +94,7 @@ class GooglePayJsonFactoryTest {
                     "type": "CARD",
                     "parameters": {
                         "allowedAuthMethods": ["PAN_ONLY", "CRYPTOGRAM_3DS"],
-                        "allowedCardNetworks": ["AMEX", "DISCOVER", "INTERAC", "MASTERCARD", "VISA"],
+                        "allowedCardNetworks": ["AMEX", "DISCOVER", "MASTERCARD", "VISA"],
                         "billingAddressRequired": true,
                         "billingAddressParameters": {
                             "phoneNumberRequired": true,
@@ -176,6 +176,21 @@ class GooglePayJsonFactoryTest {
     }
 
     @Test
+    fun currencyCode_shouldBeCapitalized() {
+        val createPaymentDataRequestJson = factory.createPaymentDataRequest(
+            transactionInfo = GooglePayJsonFactory.TransactionInfo(
+                currencyCode = "usd",
+                totalPriceStatus = GooglePayJsonFactory.TransactionInfo.TotalPriceStatus.Final
+            )
+        )
+        val currencyCode = createPaymentDataRequestJson
+            .getJSONObject("transactionInfo")
+            .getString("currencyCode")
+        assertThat(currencyCode)
+            .isEqualTo("USD")
+    }
+
+    @Test
     fun shippingAddressAllowedCountryCodes_shouldBeCapitalized() {
         val createPaymentDataRequestJson = factory.createPaymentDataRequest(
             transactionInfo = GooglePayJsonFactory.TransactionInfo(
@@ -214,7 +229,7 @@ class GooglePayJsonFactoryTest {
             }
 
         assertThat(allowedCardNetworks)
-            .isEqualTo(listOf("AMEX", "DISCOVER", "INTERAC", "MASTERCARD", "VISA"))
+            .isEqualTo(listOf("AMEX", "DISCOVER", "MASTERCARD", "VISA"))
     }
 
     @Test
@@ -231,6 +246,6 @@ class GooglePayJsonFactoryTest {
                 }
 
         assertThat(allowedCardNetworks)
-            .isEqualTo(listOf("AMEX", "DISCOVER", "INTERAC", "MASTERCARD", "VISA", "JCB"))
+            .isEqualTo(listOf("AMEX", "DISCOVER", "MASTERCARD", "VISA", "JCB"))
     }
 }

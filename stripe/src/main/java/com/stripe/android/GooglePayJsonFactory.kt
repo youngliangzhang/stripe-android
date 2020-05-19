@@ -129,7 +129,7 @@ class GooglePayJsonFactory constructor(
         transactionInfo: TransactionInfo
     ): JSONObject {
         return JSONObject()
-            .put("currencyCode", transactionInfo.currencyCode)
+            .put("currencyCode", transactionInfo.currencyCode.toUpperCase(Locale.ROOT))
             .put("totalPriceStatus", transactionInfo.totalPriceStatus.code)
             .apply {
                 transactionInfo.countryCode?.let {
@@ -381,7 +381,7 @@ class GooglePayJsonFactory constructor(
         internal val merchantName: String? = null
     ) : Parcelable
 
-    companion object {
+    private companion object {
         private const val API_VERSION = 2
         private const val API_VERSION_MINOR = 0
 
@@ -389,7 +389,7 @@ class GooglePayJsonFactory constructor(
 
         private val ALLOWED_AUTH_METHODS = listOf("PAN_ONLY", "CRYPTOGRAM_3DS")
         private val DEFAULT_CARD_NETWORKS =
-            listOf("AMEX", "DISCOVER", "INTERAC", "MASTERCARD", "VISA")
+            listOf("AMEX", "DISCOVER", "MASTERCARD", "VISA")
         private const val JCB_CARD_NETWORK = "JCB"
     }
 }

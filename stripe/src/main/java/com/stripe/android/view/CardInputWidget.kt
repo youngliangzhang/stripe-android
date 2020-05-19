@@ -160,11 +160,8 @@ class CardInputWidget @JvmOverloads constructor(
         }
 
     /**
-     * Gets a [PaymentMethodCreateParams.Card] object from the user input, if all fields are
-     * valid. If not, returns `null`.
-     *
-     * @return a valid [PaymentMethodCreateParams.Card] object based on user input, or
-     * `null` if any field is invalid
+     * A [PaymentMethodCreateParams.Card] representing the card details if all fields are valid;
+     * otherwise `null`
      */
     override val paymentMethodCard: PaymentMethodCreateParams.Card?
         get() {
@@ -190,6 +187,10 @@ class CardInputWidget @JvmOverloads constructor(
             }
         }
 
+    /**
+     * A [PaymentMethodCreateParams] representing the card details and postal code if all fields
+     * are valid; otherwise `null`
+     */
     override val paymentMethodCreateParams: PaymentMethodCreateParams?
         get() {
             return paymentMethodCard?.let { card ->
@@ -198,17 +199,18 @@ class CardInputWidget @JvmOverloads constructor(
         }
 
     /**
-     * Gets a [Card] object from the user input, if all fields are valid. If not, returns
-     * `null`.
-     *
-     * @return a valid [Card] object based on user input, or `null` if any field is
-     * invalid
+     * A [Card] representing the card details and postal code if all fields are valid;
+     * otherwise `null`
      */
     override val card: Card?
         get() {
             return cardBuilder?.build()
         }
 
+    /**
+     * A [Card.Builder] representing the card details and postal code if all fields are valid;
+     * otherwise `null`
+     */
     override val cardBuilder: Card.Builder?
         get() {
             val cardNumber = cardNumberEditText.cardNumber
@@ -686,6 +688,7 @@ class CardInputWidget @JvmOverloads constructor(
         @ColorInt var errorColorInt = cardNumberEditText.defaultErrorColorInt
         cardBrandView.tintColorInt = cardNumberEditText.hintTextColors.defaultColor
         var cardHintText: String? = null
+        val shouldRequestFocus: Boolean
         if (attrs != null) {
             val a = context.theme.obtainStyledAttributes(
                 attrs,
@@ -699,9 +702,12 @@ class CardInputWidget @JvmOverloads constructor(
                 )
                 errorColorInt = a.getColor(R.styleable.CardInputView_cardTextErrorColor, errorColorInt)
                 cardHintText = a.getString(R.styleable.CardInputView_cardHintText)
+                shouldRequestFocus = a.getBoolean(R.styleable.CardInputView_android_focusedByDefault, true)
             } finally {
                 a.recycle()
             }
+        } else {
+            shouldRequestFocus = true
         }
 
         cardHintText?.let {
@@ -771,7 +777,9 @@ class CardInputWidget @JvmOverloads constructor(
 
         allFields.forEach { it.addTextChangedListener(inputChangeTextWatcher) }
 
-        cardNumberEditText.requestFocus()
+        if (shouldRequestFocus) {
+            cardNumberEditText.requestFocus()
+        }
     }
 
     /**

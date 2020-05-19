@@ -39,7 +39,11 @@ class AddPaymentMethodActivity : StripeActivity() {
     private val stripe: Stripe by lazy {
         val paymentConfiguration = args.paymentConfiguration
             ?: PaymentConfiguration.getInstance(this)
-        Stripe(applicationContext, paymentConfiguration.publishableKey)
+        Stripe(
+            applicationContext,
+            publishableKey = paymentConfiguration.publishableKey,
+            stripeAccountId = customerSession.stripeAccountId
+        )
     }
 
     private val paymentMethodType: PaymentMethod.Type by lazy {
@@ -168,36 +172,34 @@ class AddPaymentMethodActivity : StripeActivity() {
 
         isProgressBarVisible = true
 
-        viewModel.createPaymentMethod(params).observe(this, Observer {
-            when (it) {
-                is AddPaymentMethodViewModel.PaymentMethodResult.Success -> {
+        viewModel.createPaymentMethod(params).observe(this, Observer { result ->
+            result.fold(
+                onSuccess = {
                     if (shouldAttachToCustomer) {
-                        attachPaymentMethodToCustomer(it.paymentMethod)
+                        attachPaymentMethodToCustomer(it)
                     } else {
-                        finishWithPaymentMethod(it.paymentMethod)
+                        finishWithPaymentMethod(it)
                     }
-                }
-                is AddPaymentMethodViewModel.PaymentMethodResult.Error -> {
+                },
+                onFailure = {
                     isProgressBarVisible = false
-                    showError(it.errorMessage)
+                    showError(it.message.orEmpty())
                 }
-            }
+            )
         })
     }
 
     private fun attachPaymentMethodToCustomer(paymentMethod: PaymentMethod) {
         viewModel.attachPaymentMethod(
             paymentMethod
-        ).observe(this, Observer {
-            when (it) {
-                is AddPaymentMethodViewModel.PaymentMethodResult.Success -> {
-                    finishWithPaymentMethod(it.paymentMethod)
-                }
-                is AddPaymentMethodViewModel.PaymentMethodResult.Error -> {
+        ).observe(this, Observer { result ->
+            result.fold(
+                onSuccess = ::finishWithPaymentMethod,
+                onFailure = {
                     isProgressBarVisible = false
-                    showError(it.errorMessage)
+                    showError(it.message.orEmpty())
                 }
-            }
+            )
         })
     }
 
