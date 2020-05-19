@@ -1,97 +1,41 @@
 package com.stripe.android
 
-import android.os.Build
 import android.os.Parcelable
-import androidx.annotation.VisibleForTesting
 import com.stripe.android.exception.InvalidRequestException
 import java.io.UnsupportedEncodingException
-import java.util.Locale
-import java.util.Objects
 import kotlinx.android.parcel.Parcelize
-import org.json.JSONObject
 
 /**
  * A class representing a Stripe API or Analytics request.
  */
-internal class ApiRequest internal constructor(
-    method: Method,
-    url: String,
-    params: Map<String, *>? = null,
+internal data class ApiRequest internal constructor(
+    override val method: Method,
+    override val baseUrl: String,
+    override val params: Map<String, *>? = null,
     internal val options: Options,
     private val appInfo: AppInfo? = null,
-    private val systemPropertySupplier: SystemPropertySupplier = StripeSystemPropertySupplier()
-) : StripeRequest(method, url, params, MIME_TYPE) {
-    private val apiVersion: String = ApiVersion.get().code
+    private val systemPropertySupplier: (String) -> String = DEFAULT_SYSTEM_PROPERTY_SUPPLIER,
+    private val apiVersion: String = ApiVersion.get().code,
+    private val sdkVersion: String = Stripe.VERSION
+) : StripeRequest() {
+    override val mimeType: MimeType = MimeType.Form
 
-    @VisibleForTesting
-    internal val languageTag: String?
+    override val headersFactory = RequestHeadersFactory.Api(
+        options = options,
+        appInfo = appInfo,
+        systemPropertySupplier = systemPropertySupplier,
+        apiVersion = apiVersion,
+        sdkVersion = sdkVersion
+    )
+
+    override val body: String
+        @Throws(UnsupportedEncodingException::class, InvalidRequestException::class)
         get() {
-            return Locale.getDefault().toString().replace("_", "-")
-                .takeIf { it.isNotBlank() }
+            return query
         }
-
-    override fun createHeaders(): Map<String, String> {
-        return mapOf(
-            "Accept-Charset" to CHARSET,
-            "Accept" to "application/json",
-            HEADER_STRIPE_CLIENT_USER_AGENT to createStripeClientUserAgent(),
-            "Stripe-Version" to apiVersion,
-            "Authorization" to "Bearer ${options.apiKey}"
-        ).plus(
-            options.stripeAccount?.let {
-                mapOf("Stripe-Account" to it)
-            }.orEmpty()
-        ).plus(
-            options.idempotencyKey?.let {
-                mapOf("Idempotency-Key" to it)
-            }.orEmpty()
-        ).plus(
-            languageTag?.let { mapOf("Accept-Language" to it) }.orEmpty()
-        )
-    }
-
-    private fun createStripeClientUserAgent(): String {
-        return JSONObject(
-            mapOf(
-                "os.name" to "android",
-                "os.version" to Build.VERSION.SDK_INT.toString(),
-                "bindings.version" to BuildConfig.VERSION_NAME,
-                "lang" to "Java",
-                "publisher" to "Stripe",
-                "java.version" to systemPropertySupplier.get("java.version"),
-                "http.agent" to systemPropertySupplier.get(PROP_USER_AGENT)
-            ).plus(
-                appInfo?.createClientHeaders().orEmpty()
-            )
-        ).toString()
-    }
-
-    override fun getUserAgent(): String {
-        return listOfNotNull(DEFAULT_USER_AGENT, appInfo?.toUserAgent())
-            .joinToString(" ")
-    }
-
-    @Throws(UnsupportedEncodingException::class, InvalidRequestException::class)
-    override fun getOutputBytes(): ByteArray {
-        return query.toByteArray(charset(CHARSET))
-    }
 
     override fun toString(): String {
         return "${method.code} $baseUrl"
-    }
-
-    override fun hashCode(): Int {
-        return Objects.hash(baseHashCode, options, appInfo)
-    }
-
-    override fun equals(other: Any?): Boolean {
-        return super.equals(other) || other is ApiRequest && typedEquals((other as ApiRequest?)!!)
-    }
-
-    private fun typedEquals(obj: ApiRequest): Boolean {
-        return super.typedEquals(obj) &&
-            options == obj.options &&
-            appInfo == obj.appInfo
     }
 
     /**
@@ -108,42 +52,53 @@ internal class ApiRequest internal constructor(
         }
     }
 
+    class Factory(
+        private val appInfo: AppInfo? = null,
+        private val apiVersion: String = ApiVersion.get().code,
+        private val sdkVersion: String = Stripe.VERSION
+    ) {
+        fun createGet(
+            url: String,
+            options: Options,
+            params: Map<String, *>? = null
+        ): ApiRequest {
+            return ApiRequest(
+                Method.GET, url, params, options, appInfo,
+                apiVersion = apiVersion,
+                sdkVersion = sdkVersion
+            )
+        }
+
+        fun createPost(
+            url: String,
+            options: Options,
+            params: Map<String, *>? = null
+        ): ApiRequest {
+            return ApiRequest(
+                Method.POST, url, params, options, appInfo,
+                apiVersion = apiVersion,
+                sdkVersion = sdkVersion
+            )
+        }
+
+        fun createDelete(
+            url: String,
+            options: Options
+        ): ApiRequest {
+            return ApiRequest(
+                Method.DELETE,
+                url,
+                options = options,
+                appInfo = appInfo,
+                apiVersion = apiVersion,
+                sdkVersion = sdkVersion
+            )
+        }
+    }
+
     internal companion object {
-        internal const val MIME_TYPE = "application/x-www-form-urlencoded"
         internal const val API_HOST = "https://api.stripe.com"
 
         internal const val HEADER_STRIPE_CLIENT_USER_AGENT = "X-Stripe-Client-User-Agent"
-
-        // this is the default user agent set by the system
-        private const val PROP_USER_AGENT = "http.agent"
-
-        @JvmSynthetic
-        internal fun createGet(
-            url: String,
-            options: Options,
-            params: Map<String, *>? = null,
-            appInfo: AppInfo? = null
-        ): ApiRequest {
-            return ApiRequest(Method.GET, url, params, options, appInfo)
-        }
-
-        @JvmSynthetic
-        internal fun createPost(
-            url: String,
-            options: Options,
-            params: Map<String, *>? = null,
-            appInfo: AppInfo? = null
-        ): ApiRequest {
-            return ApiRequest(Method.POST, url, params, options, appInfo)
-        }
-
-        @JvmSynthetic
-        internal fun createDelete(
-            url: String,
-            options: Options,
-            appInfo: AppInfo? = null
-        ): ApiRequest {
-            return ApiRequest(Method.DELETE, url, null, options, appInfo)
-        }
     }
 }

@@ -10,7 +10,6 @@ import com.stripe.android.model.PaymentMethodFixtures
 import com.stripe.android.utils.ParcelUtils
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlinx.android.synthetic.main.card_input_widget.view.*
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
@@ -25,10 +24,9 @@ class PaymentMethodsActivityStarterTest {
         val args = PaymentMethodsActivityStarter.Args.Builder()
             .setInitialPaymentMethodId("pm_12345")
             .setIsPaymentSessionActive(true)
-            .setShouldRequirePostalCode(true)
             .setPaymentMethodTypes(listOf(PaymentMethod.Type.Card, PaymentMethod.Type.Fpx))
             .setPaymentConfiguration(PaymentConfiguration.getInstance(context))
-            .setAddPaymentMethodFooter(R.layout.activity_payment_methods)
+            .setAddPaymentMethodFooter(R.layout.payment_methods_activity)
             .setBillingAddressFields(BillingAddressFields.Full)
             .build()
 

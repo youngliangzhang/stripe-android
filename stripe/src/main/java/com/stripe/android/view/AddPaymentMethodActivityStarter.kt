@@ -39,7 +39,6 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
     data class Args internal constructor(
         internal val billingAddressFields: BillingAddressFields,
         internal val shouldAttachToCustomer: Boolean,
-        internal val shouldRequirePostalCode: Boolean,
         internal val shouldUseUSPostalCode: Boolean,
         internal val isPaymentSessionActive: Boolean,
         internal val shouldInitCustomerSessionTokens: Boolean,
@@ -50,17 +49,17 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
     ) : ActivityStarter.Args {
 
         class Builder : ObjectBuilder<Args> {
-            private var billingAddressFields: BillingAddressFields = BillingAddressFields.None
+            private var billingAddressFields: BillingAddressFields = BillingAddressFields.PostalCode
             private var shouldAttachToCustomer: Boolean = false
-            private var shouldRequirePostalCode: Boolean = false
             private var shouldUseUSPostalCode: Boolean = true
             private var isPaymentSessionActive = false
             private var shouldInitCustomerSessionTokens = true
             private var paymentMethodType: PaymentMethod.Type? = PaymentMethod.Type.Card
             private var paymentConfiguration: PaymentConfiguration? = null
+            private var windowFlags: Int? = null
+
             @LayoutRes
             private var addPaymentMethodFooterLayoutId: Int = 0
-            private var windowFlags: Int? = null
 
             /**
              * If true, the created Payment Method will be attached to the current Customer
@@ -77,19 +76,6 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
                 billingAddressFields: BillingAddressFields
             ): Builder = apply {
                 this.billingAddressFields = billingAddressFields
-            }
-
-            /**
-             * If true, a postal code field will be shown and validated.
-             * Currently, only US ZIP Codes are supported.
-             */
-            @Deprecated("Use setBillingAddressFields()",
-                ReplaceWith("setBillingAddressFields(BillingAddressFields.PostalCode"))
-            fun setShouldRequirePostalCode(shouldRequirePostalCode: Boolean): Builder = apply {
-                this.shouldRequirePostalCode = shouldRequirePostalCode
-                if (shouldRequirePostalCode) {
-                    this.billingAddressFields = BillingAddressFields.PostalCode
-                }
             }
 
             fun setShouldUseUSPostalCode(shouldUseUSPostalCode: Boolean): Builder {
@@ -151,7 +137,6 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
                 return Args(
                     billingAddressFields = billingAddressFields,
                     shouldAttachToCustomer = shouldAttachToCustomer,
-                    shouldRequirePostalCode = shouldRequirePostalCode,
                     shouldUseUSPostalCode = shouldUseUSPostalCode,
                     isPaymentSessionActive = isPaymentSessionActive,
                     shouldInitCustomerSessionTokens = shouldInitCustomerSessionTokens,

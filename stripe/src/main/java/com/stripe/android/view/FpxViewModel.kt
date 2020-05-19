@@ -23,6 +23,7 @@ internal class FpxViewModel internal constructor(
 ) : AndroidViewModel(application) {
 
     private val context = application.applicationContext
+    private val publishableKey = PaymentConfiguration.getInstance(context).publishableKey
 
     private val internalFpxBankStatuses: MutableLiveData<FpxBankStatuses> = MutableLiveData()
 
@@ -32,27 +33,29 @@ internal class FpxViewModel internal constructor(
             return internalFpxBankStatuses
         }
 
+    internal var selectedPosition: Int? = null
+
     @JvmSynthetic
     internal fun loadFpxBankStatues() {
-        val stripeRepository: StripeRepository = StripeApiRepository(context)
+        val stripeRepository: StripeRepository = StripeApiRepository(context, publishableKey)
         val paymentConfiguration = PaymentConfiguration.getInstance(context)
         workScope.launch {
             val fpxBankStatuses = try {
                 stripeRepository.getFpxBankStatus(
                     ApiRequest.Options(paymentConfiguration.publishableKey))
             } catch (e: Exception) {
-                null
+                FpxBankStatuses()
             }
 
             withContext(Main) {
-                fpxBankStatuses?.let {
-                    this@FpxViewModel.internalFpxBankStatuses.value = it
-                }
+                this@FpxViewModel.internalFpxBankStatuses.value = fpxBankStatuses
             }
         }
     }
 
-    internal class Factory(private val application: Application) : ViewModelProvider.Factory {
+    internal class Factory(
+        private val application: Application
+    ) : ViewModelProvider.Factory {
         override fun <T : ViewModel?> create(modelClass: Class<T>): T {
             return FpxViewModel(application) as T
         }

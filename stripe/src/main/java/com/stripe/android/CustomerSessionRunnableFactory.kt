@@ -2,11 +2,10 @@ package com.stripe.android
 
 import android.os.Handler
 import android.util.Pair
-import androidx.annotation.IntDef
 import com.stripe.android.exception.StripeException
 import com.stripe.android.model.Customer
+import com.stripe.android.model.ListPaymentMethodsParams
 import com.stripe.android.model.PaymentMethod
-import com.stripe.android.model.ShippingInformation
 import com.stripe.android.model.Source
 
 /**
@@ -16,108 +15,92 @@ internal class CustomerSessionRunnableFactory(
     private val stripeRepository: StripeRepository,
     private val handler: Handler,
     private val publishableKey: String,
-    private val stripeAccountId: String?,
-    private val productUsage: CustomerSessionProductUsage
+    private val stripeAccountId: String?
 ) {
-    @IntDef(MessageCode.ERROR, MessageCode.CUSTOMER_RETRIEVED, MessageCode.SOURCE_RETRIEVED,
-        MessageCode.PAYMENT_METHOD_RETRIEVED, MessageCode.CUSTOMER_SHIPPING_INFO_SAVED,
-        MessageCode.PAYMENT_METHODS_RETRIEVED)
-    @Retention(AnnotationRetention.SOURCE)
-    annotation class MessageCode {
-        companion object {
-            const val ERROR = 1
-            const val CUSTOMER_RETRIEVED = 2
-            const val SOURCE_RETRIEVED = 3
-            const val PAYMENT_METHOD_RETRIEVED = 4
-            const val CUSTOMER_SHIPPING_INFO_SAVED = 5
-            const val PAYMENT_METHODS_RETRIEVED = 6
-        }
+    enum class ResultType {
+        Error,
+        CustomerRetrieved,
+        SourceRetrieved,
+        PaymentMethod, // single
+        PaymentMethods, // multiple
+        ShippingInfo
     }
 
+    @JvmSynthetic
     internal fun create(
         ephemeralKey: EphemeralKey,
-        operationId: String,
-        actionString: String?,
-        arguments: Map<String, Any>?
+        operation: EphemeralOperation
     ): Runnable? {
-        return if (actionString == null) {
-            createUpdateCustomerRunnable(ephemeralKey, operationId)
-        } else if (arguments == null) {
-            return null
-        } else if (CustomerSession.ACTION_ADD_SOURCE == actionString &&
-            arguments.containsKey(CustomerSession.KEY_SOURCE) &&
-            arguments.containsKey(CustomerSession.KEY_SOURCE_TYPE)) {
-            createAddCustomerSourceRunnable(
-                ephemeralKey,
-                arguments[CustomerSession.KEY_SOURCE] as String,
-                arguments[CustomerSession.KEY_SOURCE_TYPE] as String,
-                operationId
-            )
-        } else if (CustomerSession.ACTION_DELETE_SOURCE == actionString &&
-            arguments.containsKey(CustomerSession.KEY_SOURCE)) {
-            createDeleteCustomerSourceRunnable(
-                ephemeralKey,
-                arguments[CustomerSession.KEY_SOURCE] as String,
-                operationId
-            )
-        } else if (CustomerSession.ACTION_ATTACH_PAYMENT_METHOD ==
-            actionString && arguments.containsKey(CustomerSession.KEY_PAYMENT_METHOD)) {
-            createAttachPaymentMethodRunnable(
-                ephemeralKey,
-                arguments[CustomerSession.KEY_PAYMENT_METHOD] as String,
-                operationId
-            )
-        } else if (CustomerSession.ACTION_DETACH_PAYMENT_METHOD == actionString &&
-            arguments.containsKey(CustomerSession.KEY_PAYMENT_METHOD)) {
-            createDetachPaymentMethodRunnable(
-                ephemeralKey,
-                arguments[CustomerSession.KEY_PAYMENT_METHOD] as String,
-                operationId
-            )
-        } else if (CustomerSession.ACTION_GET_PAYMENT_METHODS == actionString) {
-            createGetPaymentMethodsRunnable(
-                ephemeralKey,
-                arguments[CustomerSession.KEY_PAYMENT_METHOD_TYPE] as String,
-                operationId
-            )
-        } else if (CustomerSession.ACTION_SET_DEFAULT_SOURCE == actionString &&
-            arguments.containsKey(CustomerSession.KEY_SOURCE) &&
-            arguments.containsKey(CustomerSession.KEY_SOURCE_TYPE)) {
-            createSetCustomerSourceDefaultRunnable(
-                ephemeralKey,
-                arguments[CustomerSession.KEY_SOURCE] as String,
-                arguments[CustomerSession.KEY_SOURCE_TYPE] as String,
-                operationId
-            )
-        } else if (CustomerSession.ACTION_SET_CUSTOMER_SHIPPING_INFO == actionString &&
-            arguments.containsKey(CustomerSession.KEY_SHIPPING_INFO)) {
-            createSetCustomerShippingInformationRunnable(
-                ephemeralKey,
-                arguments[CustomerSession.KEY_SHIPPING_INFO] as ShippingInformation,
-                operationId
-            )
-        } else {
-            // unsupported operation
-            null
+        return when (operation) {
+            is EphemeralOperation.RetrieveKey -> {
+                createUpdateCustomerRunnable(
+                    ephemeralKey,
+                    operation
+                )
+            }
+            is EphemeralOperation.Customer.AddSource -> {
+                createAddCustomerSourceRunnable(
+                    ephemeralKey,
+                    operation
+                )
+            }
+            is EphemeralOperation.Customer.DeleteSource -> {
+                createDeleteCustomerSourceRunnable(
+                    ephemeralKey,
+                    operation
+                )
+            }
+            is EphemeralOperation.Customer.AttachPaymentMethod -> {
+                createAttachPaymentMethodRunnable(
+                    ephemeralKey,
+                    operation
+                )
+            }
+            is EphemeralOperation.Customer.DetachPaymentMethod -> {
+                createDetachPaymentMethodRunnable(
+                    ephemeralKey,
+                    operation
+                )
+            }
+            is EphemeralOperation.Customer.GetPaymentMethods -> {
+                createGetPaymentMethodsRunnable(
+                    ephemeralKey,
+                    operation
+                )
+            }
+            is EphemeralOperation.Customer.UpdateDefaultSource -> {
+                createSetCustomerSourceDefaultRunnable(
+                    ephemeralKey,
+                    operation
+                )
+            }
+            is EphemeralOperation.Customer.UpdateShipping -> {
+                createSetCustomerShippingInformationRunnable(
+                    ephemeralKey,
+                    operation
+                )
+            }
+            else -> null
         }
     }
 
     private fun createAddCustomerSourceRunnable(
         key: EphemeralKey,
-        sourceId: String,
-        sourceType: String,
-        operationId: String
+        operation: EphemeralOperation.Customer.AddSource
     ): Runnable {
-        return object : CustomerSessionRunnable<Source>(handler, MessageCode.SOURCE_RETRIEVED,
-            operationId) {
+        return object : CustomerSessionRunnable<Source>(
+            handler,
+            ResultType.SourceRetrieved,
+            operation.id
+        ) {
             @Throws(StripeException::class)
             public override fun createMessageObject(): Source? {
                 return stripeRepository.addCustomerSource(
                     key.objectId,
                     publishableKey,
-                    productUsage.get(),
-                    sourceId,
-                    sourceType,
+                    operation.productUsage,
+                    operation.sourceId,
+                    operation.sourceType,
                     ApiRequest.Options(key.secret, stripeAccountId)
                 )
             }
@@ -126,18 +109,20 @@ internal class CustomerSessionRunnableFactory(
 
     private fun createDeleteCustomerSourceRunnable(
         key: EphemeralKey,
-        sourceId: String,
-        operationId: String
+        operation: EphemeralOperation.Customer.DeleteSource
     ): Runnable {
-        return object : CustomerSessionRunnable<Source>(handler, MessageCode.SOURCE_RETRIEVED,
-            operationId) {
+        return object : CustomerSessionRunnable<Source>(
+            handler,
+            ResultType.SourceRetrieved,
+            operation.id
+        ) {
             @Throws(StripeException::class)
             public override fun createMessageObject(): Source? {
                 return stripeRepository.deleteCustomerSource(
                     key.objectId,
                     publishableKey,
-                    productUsage.get(),
-                    sourceId,
+                    operation.productUsage,
+                    operation.sourceId,
                     ApiRequest.Options(key.secret, stripeAccountId)
                 )
             }
@@ -146,18 +131,20 @@ internal class CustomerSessionRunnableFactory(
 
     private fun createAttachPaymentMethodRunnable(
         key: EphemeralKey,
-        paymentMethodId: String,
-        operationId: String
+        operation: EphemeralOperation.Customer.AttachPaymentMethod
     ): Runnable {
-        return object : CustomerSessionRunnable<PaymentMethod>(handler, MessageCode.PAYMENT_METHOD_RETRIEVED,
-            operationId) {
+        return object : CustomerSessionRunnable<PaymentMethod>(
+            handler,
+            ResultType.PaymentMethod,
+            operation.id
+        ) {
             @Throws(StripeException::class)
             public override fun createMessageObject(): PaymentMethod? {
                 return stripeRepository.attachPaymentMethod(
                     key.objectId,
                     publishableKey,
-                    productUsage.get(),
-                    paymentMethodId,
+                    operation.productUsage,
+                    operation.paymentMethodId,
                     ApiRequest.Options(key.secret, stripeAccountId)
                 )
             }
@@ -166,17 +153,19 @@ internal class CustomerSessionRunnableFactory(
 
     private fun createDetachPaymentMethodRunnable(
         key: EphemeralKey,
-        paymentMethodId: String,
-        operationId: String
+        operation: EphemeralOperation.Customer.DetachPaymentMethod
     ): Runnable {
-        return object : CustomerSessionRunnable<PaymentMethod>(handler, MessageCode.PAYMENT_METHOD_RETRIEVED,
-            operationId) {
+        return object : CustomerSessionRunnable<PaymentMethod>(
+            handler,
+            ResultType.PaymentMethod,
+            operation.id
+        ) {
             @Throws(StripeException::class)
             public override fun createMessageObject(): PaymentMethod? {
                 return stripeRepository.detachPaymentMethod(
                     publishableKey,
-                    productUsage.get(),
-                    paymentMethodId,
+                    operation.productUsage,
+                    operation.paymentMethodId,
                     ApiRequest.Options(key.secret, stripeAccountId)
                 )
             }
@@ -185,18 +174,25 @@ internal class CustomerSessionRunnableFactory(
 
     private fun createGetPaymentMethodsRunnable(
         key: EphemeralKey,
-        paymentMethodType: String,
-        operationId: String
+        operation: EphemeralOperation.Customer.GetPaymentMethods
     ): Runnable {
-        return object : CustomerSessionRunnable<List<PaymentMethod>>(handler,
-            MessageCode.PAYMENT_METHODS_RETRIEVED, operationId) {
+        return object : CustomerSessionRunnable<List<PaymentMethod>>(
+            handler,
+            ResultType.PaymentMethods,
+            operation.id
+        ) {
             @Throws(StripeException::class)
             public override fun createMessageObject(): List<PaymentMethod> {
                 return stripeRepository.getPaymentMethods(
-                    key.objectId,
-                    paymentMethodType,
+                    ListPaymentMethodsParams(
+                        customerId = key.objectId,
+                        paymentMethodType = operation.type,
+                        limit = operation.limit,
+                        endingBefore = operation.endingBefore,
+                        startingAfter = operation.startingAfter
+                    ),
                     publishableKey,
-                    productUsage.get(),
+                    operation.productUsage,
                     ApiRequest.Options(key.secret, stripeAccountId)
                 )
             }
@@ -205,20 +201,21 @@ internal class CustomerSessionRunnableFactory(
 
     private fun createSetCustomerSourceDefaultRunnable(
         key: EphemeralKey,
-        sourceId: String,
-        sourceType: String,
-        operationId: String
+        operation: EphemeralOperation.Customer.UpdateDefaultSource
     ): Runnable {
-        return object : CustomerSessionRunnable<Customer>(handler, MessageCode.CUSTOMER_RETRIEVED,
-            operationId) {
+        return object : CustomerSessionRunnable<Customer>(
+            handler,
+            ResultType.CustomerRetrieved,
+            operation.id
+        ) {
             @Throws(StripeException::class)
             public override fun createMessageObject(): Customer? {
                 return stripeRepository.setDefaultCustomerSource(
                     key.objectId,
                     publishableKey,
-                    productUsage.get(),
-                    sourceId,
-                    sourceType,
+                    operation.productUsage,
+                    operation.sourceId,
+                    operation.sourceType,
                     ApiRequest.Options(key.secret, stripeAccountId)
                 )
             }
@@ -227,18 +224,20 @@ internal class CustomerSessionRunnableFactory(
 
     private fun createSetCustomerShippingInformationRunnable(
         key: EphemeralKey,
-        shippingInformation: ShippingInformation,
-        operationId: String
+        operation: EphemeralOperation.Customer.UpdateShipping
     ): Runnable {
-        return object : CustomerSessionRunnable<Customer>(handler, MessageCode.CUSTOMER_SHIPPING_INFO_SAVED,
-            operationId) {
+        return object : CustomerSessionRunnable<Customer>(
+            handler,
+            ResultType.ShippingInfo,
+            operation.id
+        ) {
             @Throws(StripeException::class)
             public override fun createMessageObject(): Customer? {
                 return stripeRepository.setCustomerShippingInfo(
                     key.objectId,
                     publishableKey,
-                    productUsage.get(),
-                    shippingInformation,
+                    operation.productUsage,
+                    operation.shippingInformation,
                     ApiRequest.Options(key.secret, stripeAccountId)
                 )
             }
@@ -247,13 +246,16 @@ internal class CustomerSessionRunnableFactory(
 
     private fun createUpdateCustomerRunnable(
         key: EphemeralKey,
-        operationId: String
+        operation: EphemeralOperation.RetrieveKey
     ): Runnable {
-        return object : CustomerSessionRunnable<Customer>(handler, MessageCode.CUSTOMER_RETRIEVED,
-            operationId) {
+        return object : CustomerSessionRunnable<Customer>(
+            handler,
+            ResultType.CustomerRetrieved,
+            operation.id
+        ) {
             @Throws(StripeException::class)
             public override fun createMessageObject(): Customer? {
-                return retrieveCustomerWithKey(key)
+                return retrieveCustomerWithKey(key, operation.productUsage)
             }
         }
     }
@@ -266,16 +268,20 @@ internal class CustomerSessionRunnableFactory(
      * @return a [Customer] if one can be found with this key, or `null` if one cannot.
      */
     @Throws(StripeException::class)
-    private fun retrieveCustomerWithKey(key: EphemeralKey): Customer? {
+    private fun retrieveCustomerWithKey(
+        key: EphemeralKey,
+        productUsage: Set<String>
+    ): Customer? {
         return stripeRepository.retrieveCustomer(
             key.objectId,
+            productUsage,
             ApiRequest.Options(key.secret, stripeAccountId)
         )
     }
 
     private abstract class CustomerSessionRunnable<T>(
         private val handler: Handler,
-        @param:MessageCode @field:MessageCode private val messageCode: Int,
+        private val resultType: ResultType,
         private val operationId: String
     ) : Runnable {
 
@@ -296,7 +302,7 @@ internal class CustomerSessionRunnableFactory(
         private fun sendMessage(messageObject: T?) {
             handler.sendMessage(
                 handler.obtainMessage(
-                    messageCode,
+                    resultType.ordinal,
                     Pair.create<String, T>(operationId, messageObject)
                 )
             )
@@ -305,7 +311,7 @@ internal class CustomerSessionRunnableFactory(
         private fun sendErrorMessage(stripeEx: StripeException) {
             handler.sendMessage(
                 handler.obtainMessage(
-                    MessageCode.ERROR,
+                    ResultType.Error.ordinal,
                     Pair.create(operationId, stripeEx)
                 )
             )

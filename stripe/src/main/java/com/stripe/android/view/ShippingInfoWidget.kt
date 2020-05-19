@@ -3,12 +3,15 @@ package com.stripe.android.view
 import android.content.Context
 import android.os.Build
 import android.telephony.PhoneNumberFormattingTextWatcher
+import android.text.InputFilter
+import android.text.InputFilter.AllCaps
 import android.util.AttributeSet
+import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import androidx.annotation.StringDef
-import com.google.android.material.textfield.TextInputLayout
 import com.stripe.android.R
+import com.stripe.android.databinding.AddressWidgetBinding
 import com.stripe.android.model.Address
 import com.stripe.android.model.ShippingInformation
 import java.util.Locale
@@ -22,25 +25,31 @@ class ShippingInfoWidget @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : LinearLayout(context, attrs, defStyleAttr) {
 
-    private val shippingPostalCodeValidator: ShippingPostalCodeValidator
+    private val viewBinding: AddressWidgetBinding by lazy {
+        AddressWidgetBinding.inflate(
+            LayoutInflater.from(context),
+            this
+        )
+    }
+    private val postalCodeValidator: PostalCodeValidator = PostalCodeValidator()
     private var optionalShippingInfoFields: List<String> = emptyList()
     private var hiddenShippingInfoFields: List<String> = emptyList()
 
-    private val countryAutoCompleteTextView: CountryAutoCompleteTextView
-    private val addressLine1TextInputLayout: TextInputLayout
-    private val addressLine2TextInputLayout: TextInputLayout
-    private val cityTextInputLayout: TextInputLayout
-    private val nameTextInputLayout: TextInputLayout
-    private val postalCodeTextInputLayout: TextInputLayout
-    private val stateTextInputLayout: TextInputLayout
-    private val phoneNumberTextInputLayout: TextInputLayout
-    private val addressEditText: StripeEditText
-    private val addressEditText2: StripeEditText
-    private val cityEditText: StripeEditText
-    private val nameEditText: StripeEditText
-    private val postalCodeEditText: StripeEditText
-    private val stateEditText: StripeEditText
-    private val phoneNumberEditText: StripeEditText
+    private val countryAutoCompleteTextView = viewBinding.countryAutocompleteAaw
+    private val addressLine1TextInputLayout = viewBinding.tlAddressLine1Aaw
+    private val addressLine2TextInputLayout = viewBinding.tlAddressLine2Aaw
+    private val cityTextInputLayout = viewBinding.tlCityAaw
+    private val nameTextInputLayout = viewBinding.tlNameAaw
+    private val postalCodeTextInputLayout = viewBinding.tlPostalCodeAaw
+    private val stateTextInputLayout = viewBinding.tlStateAaw
+    private val phoneNumberTextInputLayout = viewBinding.tlPhoneNumberAaw
+    private val addressEditText = viewBinding.etAddressLineOneAaw
+    private val addressEditText2 = viewBinding.etAddressLineTwoAaw
+    private val cityEditText = viewBinding.etCityAaw
+    private val nameEditText = viewBinding.etNameAaw
+    private val postalCodeEditText = viewBinding.etPostalCodeAaw
+    private val stateEditText = viewBinding.etStateAaw
+    private val phoneNumberEditText = viewBinding.etPhoneNumberAaw
 
     /**
      * Return [ShippingInformation] based on user input if valid, otherwise null.
@@ -61,15 +70,15 @@ class ShippingInfoWidget @JvmOverloads constructor(
         get() {
             return ShippingInformation(
                 Address.Builder()
-                    .setCity(cityEditText.text?.toString())
+                    .setCity(cityEditText.fieldText)
                     .setCountry(countryAutoCompleteTextView.selectedCountry?.code)
-                    .setLine1(addressEditText.text?.toString())
-                    .setLine2(addressEditText2.text?.toString())
-                    .setPostalCode(postalCodeEditText.text?.toString())
-                    .setState(stateEditText.text?.toString())
+                    .setLine1(addressEditText.fieldText)
+                    .setLine2(addressEditText2.fieldText)
+                    .setPostalCode(postalCodeEditText.fieldText)
+                    .setState(stateEditText.fieldText)
                     .build(),
-                nameEditText.text?.toString(),
-                phoneNumberEditText.text?.toString()
+                nameEditText.fieldText,
+                phoneNumberEditText.fieldText
             )
         }
 
@@ -98,23 +107,6 @@ class ShippingInfoWidget @JvmOverloads constructor(
 
     init {
         orientation = VERTICAL
-        View.inflate(context, R.layout.add_address_widget, this)
-
-        countryAutoCompleteTextView = findViewById(R.id.country_autocomplete_aaw)
-        addressLine1TextInputLayout = findViewById(R.id.tl_address_line1_aaw)
-        addressLine2TextInputLayout = findViewById(R.id.tl_address_line2_aaw)
-        cityTextInputLayout = findViewById(R.id.tl_city_aaw)
-        nameTextInputLayout = findViewById(R.id.tl_name_aaw)
-        postalCodeTextInputLayout = findViewById(R.id.tl_postal_code_aaw)
-        stateTextInputLayout = findViewById(R.id.tl_state_aaw)
-        addressEditText = findViewById(R.id.et_address_line_one_aaw)
-        addressEditText2 = findViewById(R.id.et_address_line_two_aaw)
-        cityEditText = findViewById(R.id.et_city_aaw)
-        nameEditText = findViewById(R.id.et_name_aaw)
-        postalCodeEditText = findViewById(R.id.et_postal_code_aaw)
-        stateEditText = findViewById(R.id.et_state_aaw)
-        phoneNumberEditText = findViewById(R.id.et_phone_number_aaw)
-        phoneNumberTextInputLayout = findViewById(R.id.tl_phone_number_aaw)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nameEditText.setAutofillHints(View.AUTOFILL_HINT_NAME)
@@ -122,8 +114,6 @@ class ShippingInfoWidget @JvmOverloads constructor(
             postalCodeEditText.setAutofillHints(View.AUTOFILL_HINT_POSTAL_CODE)
             phoneNumberEditText.setAutofillHints(View.AUTOFILL_HINT_PHONE)
         }
-
-        shippingPostalCodeValidator = ShippingPostalCodeValidator()
 
         initView()
     }
@@ -135,7 +125,7 @@ class ShippingInfoWidget @JvmOverloads constructor(
         optionalShippingInfoFields = optionalAddressFields.orEmpty()
         renderLabels()
 
-        countryAutoCompleteTextView.selectedCountry?.let(::renderCountrySpecificLabels)
+        countryAutoCompleteTextView.selectedCountry?.let(::updateConfigForCountry)
     }
 
     /**
@@ -146,7 +136,7 @@ class ShippingInfoWidget @JvmOverloads constructor(
         hiddenShippingInfoFields = hiddenAddressFields.orEmpty()
         renderLabels()
 
-        countryAutoCompleteTextView.selectedCountry?.let(::renderCountrySpecificLabels)
+        countryAutoCompleteTextView.selectedCountry?.let(::updateConfigForCountry)
     }
 
     /**
@@ -157,20 +147,22 @@ class ShippingInfoWidget @JvmOverloads constructor(
             return
         }
 
-        shippingInformation.address?.let { address ->
-            cityEditText.setText(address.city)
-            address.country?.let { country ->
-                if (country.isNotEmpty()) {
-                    countryAutoCompleteTextView.setCountrySelected(country)
-                }
-            }
-            addressEditText.setText(address.line1)
-            addressEditText2.setText(address.line2)
-            postalCodeEditText.setText(address.postalCode)
-            stateEditText.setText(address.state)
-        }
+        shippingInformation.address?.let(::populateAddressFields)
         nameEditText.setText(shippingInformation.name)
         phoneNumberEditText.setText(shippingInformation.phone)
+    }
+
+    private fun populateAddressFields(address: Address) {
+        cityEditText.setText(address.city)
+        address.country?.let { country ->
+            if (country.isNotEmpty()) {
+                countryAutoCompleteTextView.setCountrySelected(country)
+            }
+        }
+        addressEditText.setText(address.line1)
+        addressEditText2.setText(address.line2)
+        postalCodeEditText.setText(address.postalCode)
+        stateEditText.setText(address.state)
     }
 
     fun setAllowedCountryCodes(allowedCountryCodes: Set<String>) {
@@ -193,7 +185,7 @@ class ShippingInfoWidget @JvmOverloads constructor(
         countryAutoCompleteTextView.validateCountry()
         val selectedCountry = countryAutoCompleteTextView.selectedCountry
 
-        val isPostalCodeValid = shippingPostalCodeValidator.isValid(
+        val isPostalCodeValid = postalCodeValidator.isValid(
             postalCode,
             selectedCountry?.code,
             optionalShippingInfoFields,
@@ -238,13 +230,13 @@ class ShippingInfoWidget @JvmOverloads constructor(
     }
 
     private fun initView() {
-        countryAutoCompleteTextView.countryChangeCallback = ::renderCountrySpecificLabels
+        countryAutoCompleteTextView.countryChangeCallback = ::updateConfigForCountry
 
         phoneNumberEditText.addTextChangedListener(PhoneNumberFormattingTextWatcher())
         setupErrorHandling()
         renderLabels()
 
-        countryAutoCompleteTextView.selectedCountry?.let(::renderCountrySpecificLabels)
+        countryAutoCompleteTextView.selectedCountry?.let(::updateConfigForCountry)
     }
 
     private fun setupErrorHandling() {
@@ -299,13 +291,15 @@ class ShippingInfoWidget @JvmOverloads constructor(
         }
     }
 
-    private fun renderCountrySpecificLabels(country: Country) {
+    private fun updateConfigForCountry(country: Country) {
         when (country.code) {
             Locale.US.country -> renderUSForm()
             Locale.UK.country -> renderGreatBritainForm()
             Locale.CANADA.country -> renderCanadianForm()
             else -> renderInternationalForm()
         }
+
+        updatePostalCodeInputFilter(country)
 
         postalCodeTextInputLayout.visibility =
             if (CountryUtils.doesCountryUsePostalCode(country.code) &&
@@ -314,6 +308,13 @@ class ShippingInfoWidget @JvmOverloads constructor(
             } else {
                 View.GONE
             }
+    }
+
+    private fun updatePostalCodeInputFilter(country: Country) {
+        postalCodeEditText.filters = when (country.code) {
+            Locale.CANADA.country -> arrayOf<InputFilter>(AllCaps())
+            else -> arrayOf<InputFilter>()
+        }
     }
 
     private fun renderUSForm() {

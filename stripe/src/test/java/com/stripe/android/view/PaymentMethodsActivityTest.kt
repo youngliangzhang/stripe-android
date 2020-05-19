@@ -5,12 +5,12 @@ import android.app.Activity.RESULT_OK
 import android.content.Context
 import android.content.Intent
 import android.view.View
-import android.widget.ProgressBar
-import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
 import com.nhaarman.mockitokotlin2.KArgumentCaptor
 import com.nhaarman.mockitokotlin2.argumentCaptor
 import com.nhaarman.mockitokotlin2.eq
+import com.nhaarman.mockitokotlin2.isNull
+import com.nhaarman.mockitokotlin2.mock
 import com.nhaarman.mockitokotlin2.verify
 import com.stripe.android.ApiKeyFixtures
 import com.stripe.android.CustomerSession
@@ -24,9 +24,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.junit.runner.RunWith
-import org.mockito.Mock
 import org.mockito.Mockito.times
-import org.mockito.MockitoAnnotations
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 
@@ -35,23 +33,17 @@ import org.robolectric.Shadows.shadowOf
  */
 @RunWith(RobolectricTestRunner::class)
 class PaymentMethodsActivityTest {
-    @Mock
-    private lateinit var customerSession: CustomerSession
+    private val customerSession: CustomerSession = mock()
 
-    private lateinit var listenerArgumentCaptor: KArgumentCaptor<CustomerSession.PaymentMethodsRetrievalListener>
+    private val listenerArgumentCaptor: KArgumentCaptor<CustomerSession.PaymentMethodsRetrievalListener> = argumentCaptor()
 
-    private val context: Context by lazy {
-        ApplicationProvider.getApplicationContext<Context>()
-    }
+    private val context = ApplicationProvider.getApplicationContext<Context>()
     private val activityScenarioFactory: ActivityScenarioFactory by lazy {
         ActivityScenarioFactory(context)
     }
 
     @BeforeTest
     fun setup() {
-        MockitoAnnotations.initMocks(this)
-        listenerArgumentCaptor = argumentCaptor()
-
         CustomerSession.instance = customerSession
         PaymentConfiguration.init(context, ApiKeyFixtures.FAKE_PUBLISHABLE_KEY)
     }
@@ -64,12 +56,16 @@ class PaymentMethodsActivityTest {
                 .build()
         ).use { activityScenario ->
             activityScenario.onActivity {
-                val progressBar: ProgressBar = it.findViewById(R.id.payment_methods_progress_bar)
-                val recyclerView: RecyclerView = it.findViewById(R.id.payment_methods_recycler)
+                val progressBar = it.viewBinding.progressBar
+                val recyclerView = it.viewBinding.recycler
                 val addCardView: View = it.findViewById(R.id.stripe_payment_methods_add_card)
 
                 verify(customerSession).getPaymentMethods(
                     eq(PaymentMethod.Type.Card),
+                    isNull(),
+                    isNull(),
+                    isNull(),
+                    eq(setOf(PaymentMethodsActivity.PRODUCT_TOKEN)),
                     listenerArgumentCaptor.capture()
                 )
 
@@ -96,11 +92,15 @@ class PaymentMethodsActivityTest {
                 .build()
         ).use { activityScenario ->
             activityScenario.onActivity {
-                val recyclerView: RecyclerView = it.findViewById(R.id.payment_methods_recycler)
+                val recyclerView = it.viewBinding.recycler
 
                 verify(customerSession)
                     .getPaymentMethods(
                         eq(PaymentMethod.Type.Card),
+                        isNull(),
+                        isNull(),
+                        isNull(),
+                        eq(setOf(PaymentMethodsActivity.PRODUCT_TOKEN)),
                         listenerArgumentCaptor.capture()
                     )
 
@@ -164,8 +164,8 @@ class PaymentMethodsActivityTest {
                 .build()
         ).use { activityScenario ->
             activityScenario.onActivity { activity ->
-                val progressBar: ProgressBar = activity.findViewById(R.id.payment_methods_progress_bar)
-                val recyclerView: RecyclerView = activity.findViewById(R.id.payment_methods_recycler)
+                val progressBar = activity.viewBinding.progressBar
+                val recyclerView = activity.viewBinding.recycler
 
                 val paymentMethod = PaymentMethodFixtures.CARD_PAYMENT_METHODS[2]
                 assertNotNull(paymentMethod)
@@ -177,7 +177,14 @@ class PaymentMethodsActivityTest {
                 )
                 assertEquals(View.VISIBLE, progressBar.visibility)
                 verify(customerSession, times(2))
-                    .getPaymentMethods(eq(PaymentMethod.Type.Card), listenerArgumentCaptor.capture())
+                    .getPaymentMethods(
+                        eq(PaymentMethod.Type.Card),
+                        isNull(),
+                        isNull(),
+                        isNull(),
+                        eq(setOf(PaymentMethodsActivity.PRODUCT_TOKEN)),
+                        listenerArgumentCaptor.capture()
+                    )
 
                 listenerArgumentCaptor.firstValue
                     .onPaymentMethodsRetrieved(PaymentMethodFixtures.CARD_PAYMENT_METHODS)
@@ -201,15 +208,16 @@ class PaymentMethodsActivityTest {
                 .build()
         ).use { activityScenario ->
             activityScenario.onActivity { activity ->
-                val progressBar: ProgressBar =
-                    activity.findViewById(R.id.payment_methods_progress_bar)
-                val recyclerView: RecyclerView =
-                    activity.findViewById(R.id.payment_methods_recycler)
-                val addCardView: View =
-                    activity.findViewById(R.id.stripe_payment_methods_add_card)
+                val progressBar = activity.viewBinding.progressBar
+                val recyclerView = activity.viewBinding.recycler
+                val addCardView: View = activity.findViewById(R.id.stripe_payment_methods_add_card)
 
                 verify(customerSession).getPaymentMethods(
                     eq(PaymentMethod.Type.Card),
+                    isNull(),
+                    isNull(),
+                    isNull(),
+                    eq(setOf(PaymentMethodsActivity.PRODUCT_TOKEN)),
                     listenerArgumentCaptor.capture()
                 )
 

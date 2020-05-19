@@ -11,19 +11,31 @@ import kotlinx.android.parcel.Parcelize
 class PaymentFlowActivityStarter :
     ActivityStarter<PaymentFlowActivity, PaymentFlowActivityStarter.Args> {
 
-    constructor(activity: Activity) : super(
-        activity, PaymentFlowActivity::class.java, Args.DEFAULT, REQUEST_CODE
+    constructor(activity: Activity, config: PaymentSessionConfig) : super(
+        activity,
+        PaymentFlowActivity::class.java,
+        Args(
+            paymentSessionConfig = config,
+            paymentSessionData = PaymentSessionData(config)
+        ),
+        REQUEST_CODE
     )
 
-    constructor(fragment: Fragment) : super(
-        fragment, PaymentFlowActivity::class.java, Args.DEFAULT, REQUEST_CODE
+    constructor(fragment: Fragment, config: PaymentSessionConfig) : super(
+        fragment,
+        PaymentFlowActivity::class.java,
+        Args(
+            paymentSessionConfig = config,
+            paymentSessionData = PaymentSessionData(config)
+        ),
+        REQUEST_CODE
     )
 
     @Parcelize
     data class Args internal constructor(
         internal val paymentSessionConfig: PaymentSessionConfig,
         internal val paymentSessionData: PaymentSessionData,
-        internal val isPaymentSessionActive: Boolean,
+        internal val isPaymentSessionActive: Boolean = false,
         internal val windowFlags: Int? = null
     ) : ActivityStarter.Args {
         class Builder : ObjectBuilder<Args> {
@@ -57,8 +69,9 @@ class PaymentFlowActivityStarter :
 
             override fun build(): Args {
                 return Args(
-                    paymentSessionConfig = paymentSessionConfig
-                        ?: PaymentSessionConfig.Builder().build(),
+                    paymentSessionConfig = requireNotNull(paymentSessionConfig) {
+                        "PaymentFlowActivity launched without PaymentSessionConfig"
+                    },
                     paymentSessionData = requireNotNull(paymentSessionData) {
                         "PaymentFlowActivity launched without PaymentSessionData"
                     },
@@ -69,10 +82,6 @@ class PaymentFlowActivityStarter :
         }
 
         companion object {
-            internal val DEFAULT = Builder()
-                .setPaymentSessionData(PaymentSessionData())
-                .build()
-
             @JvmStatic
             fun create(intent: Intent): Args {
                 return requireNotNull(intent.getParcelableExtra(ActivityStarter.Args.EXTRA))

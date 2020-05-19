@@ -56,6 +56,8 @@ data class SetupIntent internal constructor(
 
     override val nextActionType: StripeIntent.NextActionType? = null,
 
+    override val paymentMethod: PaymentMethod? = null,
+
     /**
      * @return ID of the payment method used with this SetupIntent.
      */
@@ -85,8 +87,8 @@ data class SetupIntent internal constructor(
     /**
      * @return The error encountered in the previous SetupIntent confirmation.
      */
-    val lastSetupError: Error?
-) : StripeModel, StripeIntent {
+    val lastSetupError: Error? = null
+) : StripeIntent {
 
     override val redirectData: StripeIntent.RedirectData?
         get() {
@@ -212,7 +214,7 @@ data class SetupIntent internal constructor(
         }
 
         private companion object {
-            private val PATTERN = Pattern.compile("^seti_([a-zA-Z0-9])+_secret_([a-zA-Z0-9])+$")
+            private val PATTERN = Pattern.compile("^seti_[^_]+_secret_[^_]+$")
         }
     }
 

@@ -10,20 +10,22 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.stripe.example.R
-import kotlinx.android.synthetic.main.activity_launcher.*
+import com.stripe.example.databinding.LauncherActivityBinding
 
 class LauncherActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_launcher)
+
+        val viewBinding = LauncherActivityBinding.inflate(layoutInflater)
+        setContentView(viewBinding.root)
 
         val linearLayoutManager = LinearLayoutManager(this)
             .apply {
                 orientation = LinearLayoutManager.VERTICAL
             }
 
-        examples.run {
+        viewBinding.examples.run {
             setHasFixedSize(true)
             layoutManager = linearLayoutManager
             adapter = ExamplesAdapter(this@LauncherActivity)
@@ -50,12 +52,24 @@ class LauncherActivity : AppCompatActivity() {
                 FragmentExamplesActivity::class.java),
             Item(activity.getString(R.string.launch_pay_with_google),
                 PayWithGoogleActivity::class.java),
-            Item(activity.getString(R.string.launch_create_pm_sepa_debit),
-                CreateSepaDebitActivity::class.java),
+            Item(activity.getString(R.string.launch_confirm_pm_sepa_debit),
+                ConfirmSepaDebitActivity::class.java),
             Item(activity.getString(R.string.fpx_payment_example),
                 FpxPaymentActivity::class.java),
             Item(activity.getString(R.string.klarna_source_example),
-                KlarnaSourceActivity::class.java)
+                KlarnaSourceActivity::class.java),
+            Item(activity.getString(R.string.becs_debit_example),
+                BecsDebitPaymentMethodActivity::class.java),
+            Item(activity.getString(R.string.bacs_debit_example),
+                BacsDebitPaymentMethodActivity::class.java),
+            Item(activity.getString(R.string.sofort_example),
+                SofortPaymentMethodActivity::class.java),
+            Item(activity.getString(R.string.card_brands),
+                CardBrandsActivity::class.java),
+            Item(activity.getString(R.string.simple_payment_method_example),
+                SimplePaymentMethodConfirmationActivity::class.java),
+            Item(activity.getString(R.string.connect_example),
+                ConnectExampleActivity::class.java)
         )
 
         override fun onCreateViewHolder(viewGroup: ViewGroup, i: Int): ExamplesViewHolder {

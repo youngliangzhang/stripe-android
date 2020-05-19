@@ -1,43 +1,53 @@
 package com.stripe.android
 
-import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.stripe.android.exception.InvalidRequestException
-import java.io.UnsupportedEncodingException
+import com.google.common.truth.Truth.assertThat
+import java.io.ByteArrayOutputStream
+import java.util.UUID
 import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class FingerprintRequestTest {
-    @Test
-    fun getContentType() {
-        assertEquals(
-            "application/json; charset=UTF-8",
-            FingerprintRequest(emptyMap(), "guid").contentType
+    private val fingerprintRequestParamsFactory = FingerprintRequestParamsFactory(
+        ApplicationProvider.getApplicationContext()
+    )
+
+    private val request =
+        FingerprintRequest(
+            params = fingerprintRequestParamsFactory.createParams(),
+            guid = GUID
         )
+
+    @Test
+    fun contentType_shouldBeApplicationJson() {
+        assertThat(request.contentType)
+            .isEqualTo("application/json; charset=UTF-8")
     }
 
     @Test
-    fun getHeaders() {
-        val headers = FingerprintRequest(emptyMap(), "guid").headers
-        assertEquals(
-            StripeRequest.DEFAULT_USER_AGENT,
-            headers[StripeRequest.HEADER_USER_AGENT]
-        )
-        assertEquals("m=guid", headers["Cookie"])
+    fun headers_shouldReturnExpectedMap() {
+        assertThat(request.headers)
+            .isEqualTo(
+                mapOf(
+                    "Cookie" to "m=$GUID",
+                    "User-Agent" to RequestHeadersFactory.getUserAgent(),
+                    "Accept-Charset" to "UTF-8"
+                )
+            )
     }
 
     @Test
-    @Throws(UnsupportedEncodingException::class, InvalidRequestException::class)
-    fun getOutputBytes() {
-        val telemetryClientUtil =
-            TelemetryClientUtil(ApplicationProvider.getApplicationContext<Context>())
-        val output =
-            FingerprintRequest(telemetryClientUtil.createTelemetryMap(), "guid")
-                .getOutputBytes()
-        assertTrue(output.isNotEmpty())
+    fun writeBody_shouldWriteNonEmptyBytes() {
+        ByteArrayOutputStream().use {
+            request.writeBody(it)
+            assertThat(it.size())
+                .isGreaterThan(0)
+        }
+    }
+
+    private companion object {
+        private val GUID = UUID.randomUUID().toString()
     }
 }

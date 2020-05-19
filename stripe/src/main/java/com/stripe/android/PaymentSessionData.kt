@@ -11,7 +11,9 @@ import kotlinx.android.parcel.Parcelize
  */
 @Parcelize
 data class PaymentSessionData internal constructor(
-    private val config: PaymentSessionConfig? = null,
+    private val isShippingInfoRequired: Boolean,
+
+    private val isShippingMethodRequired: Boolean,
 
     /**
      * The cart total value, excluding shipping and tax items.
@@ -36,8 +38,19 @@ data class PaymentSessionData internal constructor(
     /**
      * @return the selected payment method for the associated [PaymentSession]
      */
-    val paymentMethod: PaymentMethod? = null
+    val paymentMethod: PaymentMethod? = null,
+
+    /**
+     * When `true`, the customer has indicated their intent to pay with Google Pay. Use the
+     * [Google Pay API](https://developers.google.com/pay/api/android/overview) to complete
+     * payment with Google Pay.
+     */
+    val useGooglePay: Boolean = false
 ) : Parcelable {
+    internal constructor(config: PaymentSessionConfig) : this(
+        isShippingInfoRequired = config.isShippingInfoRequired,
+        isShippingMethodRequired = config.isShippingMethodRequired
+    )
 
     /**
      * Whether the payment data is ready for making a charge. This can be used to
@@ -45,7 +58,7 @@ data class PaymentSessionData internal constructor(
      */
     val isPaymentReadyToCharge: Boolean
         get() =
-            paymentMethod != null && config != null &&
-                (!config.isShippingInfoRequired || shippingInformation != null) &&
-                (!config.isShippingMethodRequired || shippingMethod != null)
+            (paymentMethod != null || useGooglePay) &&
+                (!isShippingInfoRequired || shippingInformation != null) &&
+                (!isShippingMethodRequired || shippingMethod != null)
 }

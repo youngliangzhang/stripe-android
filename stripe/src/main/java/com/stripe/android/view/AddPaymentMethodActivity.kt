@@ -2,19 +2,23 @@ package com.stripe.android.view
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.text.method.LinkMovementMethod
 import android.text.util.Linkify
+import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.annotation.StringRes
 import androidx.core.text.util.LinkifyCompat
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.Observer
-import androidx.lifecycle.ViewModelProviders
+import androidx.lifecycle.ViewModelProvider
 import com.stripe.android.CustomerSession
 import com.stripe.android.PaymentConfiguration
 import com.stripe.android.R
 import com.stripe.android.Stripe
+import com.stripe.android.databinding.AddPaymentMethodActivityBinding
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.PaymentMethodCreateParams
 
@@ -47,7 +51,9 @@ class AddPaymentMethodActivity : StripeActivity() {
     }
 
     private val addPaymentMethodView: AddPaymentMethodView by lazy {
-        createPaymentMethodView(args)
+        createPaymentMethodView(args).also {
+            it.id = R.id.stripe_add_payment_method_form
+        }
     }
 
     private val customerSession: CustomerSession by lazy {
@@ -55,7 +61,7 @@ class AddPaymentMethodActivity : StripeActivity() {
     }
 
     private val viewModel: AddPaymentMethodViewModel by lazy {
-        ViewModelProviders.of(this, AddPaymentMethodViewModel.Factory(
+        ViewModelProvider(this, AddPaymentMethodViewModel.Factory(
             stripe, customerSession, args
         ))[AddPaymentMethodViewModel::class.java]
     }
@@ -80,7 +86,6 @@ class AddPaymentMethodActivity : StripeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         configureView(args)
-        viewModel.logProductUsage()
     }
 
     override fun onResume() {
@@ -93,21 +98,17 @@ class AddPaymentMethodActivity : StripeActivity() {
             window.addFlags(it)
         }
 
-        viewStub.layoutResource = R.layout.add_payment_method_layout
+        viewStub.layoutResource = R.layout.add_payment_method_activity
         val scrollView = viewStub.inflate() as ViewGroup
-        val contentRoot: ViewGroup =
-            scrollView.findViewById(R.id.stripe_add_payment_method_content_root)
-        contentRoot.addView(addPaymentMethodView)
+        val viewBinding = AddPaymentMethodActivityBinding.bind(scrollView)
 
-        if (args.addPaymentMethodFooterLayoutId > 0) {
-            val footerView = layoutInflater.inflate(
-                args.addPaymentMethodFooterLayoutId, contentRoot, false
-            )
-            if (footerView is TextView) {
-                LinkifyCompat.addLinks(footerView, Linkify.ALL)
-                footerView.movementMethod = LinkMovementMethod.getInstance()
+        viewBinding.root.addView(addPaymentMethodView)
+        createFooterView(viewBinding.root)?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                addPaymentMethodView.accessibilityTraversalBefore = it.id
+                it.accessibilityTraversalAfter = addPaymentMethodView.id
             }
-            contentRoot.addView(footerView)
+            viewBinding.root.addView(it)
         }
 
         setTitle(titleStringRes)
@@ -134,6 +135,25 @@ class AddPaymentMethodActivity : StripeActivity() {
         }
     }
 
+    private fun createFooterView(
+        contentRoot: ViewGroup
+    ): View? {
+        return if (args.addPaymentMethodFooterLayoutId > 0) {
+            val footerView = layoutInflater.inflate(
+                args.addPaymentMethodFooterLayoutId, contentRoot, false
+            )
+            footerView.id = R.id.stripe_add_payment_method_footer
+            if (footerView is TextView) {
+                LinkifyCompat.addLinks(footerView, Linkify.ALL)
+                ViewCompat.enableAccessibleClickableSpanSupport(footerView)
+                footerView.movementMethod = LinkMovementMethod.getInstance()
+            }
+            footerView
+        } else {
+            null
+        }
+    }
+
     public override fun onActionSave() {
         createPaymentMethod(viewModel, addPaymentMethodView.createParams)
     }
@@ -146,7 +166,7 @@ class AddPaymentMethodActivity : StripeActivity() {
             return
         }
 
-        setCommunicatingProgress(true)
+        isProgressBarVisible = true
 
         viewModel.createPaymentMethod(params).observe(this, Observer {
             when (it) {
@@ -158,7 +178,7 @@ class AddPaymentMethodActivity : StripeActivity() {
                     }
                 }
                 is AddPaymentMethodViewModel.PaymentMethodResult.Error -> {
-                    setCommunicatingProgress(false)
+                    isProgressBarVisible = false
                     showError(it.errorMessage)
                 }
             }
@@ -174,7 +194,7 @@ class AddPaymentMethodActivity : StripeActivity() {
                     finishWithPaymentMethod(it.paymentMethod)
                 }
                 is AddPaymentMethodViewModel.PaymentMethodResult.Error -> {
-                    setCommunicatingProgress(false)
+                    isProgressBarVisible = false
                     showError(it.errorMessage)
                 }
             }
@@ -182,18 +202,17 @@ class AddPaymentMethodActivity : StripeActivity() {
     }
 
     private fun finishWithPaymentMethod(paymentMethod: PaymentMethod) {
-        setCommunicatingProgress(false)
+        isProgressBarVisible = false
         setResult(Activity.RESULT_OK, Intent()
             .putExtras(AddPaymentMethodActivityStarter.Result(paymentMethod).toBundle()))
         finish()
     }
 
-    override fun setCommunicatingProgress(communicating: Boolean) {
-        super.setCommunicatingProgress(communicating)
-        addPaymentMethodView.setCommunicatingProgress(communicating)
+    override fun onProgressBarVisibilityChanged(visible: Boolean) {
+        addPaymentMethodView.setCommunicatingProgress(visible)
     }
 
     internal companion object {
-        internal const val TOKEN_ADD_PAYMENT_METHOD_ACTIVITY: String = "AddPaymentMethodActivity"
+        internal const val PRODUCT_TOKEN: String = "AddPaymentMethodActivity"
     }
 }

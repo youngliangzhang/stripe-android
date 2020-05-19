@@ -44,10 +44,10 @@ class SourceTest {
         val source = SourceFixtures.CARD
         assertEquals("card_1ELxrOCRMbs6FrXfdxOGjnaD", source.id)
         assertEquals(Source.SourceType.CARD, source.type)
-        assertTrue(source.sourceTypeModel is SourceCardData)
+        assertTrue(source.sourceTypeModel is SourceTypeModel.Card)
 
-        val sourceCardData = source.sourceTypeModel as SourceCardData?
-        assertEquals(Card.CardBrand.VISA, sourceCardData?.brand)
+        val sourceCardData = source.sourceTypeModel as SourceTypeModel.Card?
+        assertEquals(CardBrand.Visa, sourceCardData?.brand)
     }
 
     @Test

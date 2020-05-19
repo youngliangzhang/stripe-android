@@ -4,18 +4,19 @@ import android.content.Context
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
+import com.nhaarman.mockitokotlin2.mock
 import com.nhaarman.mockitokotlin2.verify
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.PaymentMethodFixtures
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.junit.runner.RunWith
-import org.mockito.Mock
 import org.mockito.Mockito.times
-import org.mockito.MockitoAnnotations
 import org.robolectric.RobolectricTestRunner
 
 /**
@@ -23,11 +24,8 @@ import org.robolectric.RobolectricTestRunner
  */
 @RunWith(RobolectricTestRunner::class)
 class PaymentMethodsAdapterTest {
-    @Mock
-    private lateinit var adapterDataObserver: RecyclerView.AdapterDataObserver
-
-    @Mock
-    private lateinit var listener: PaymentMethodsAdapter.Listener
+    private val adapterDataObserver: RecyclerView.AdapterDataObserver = mock()
+    private val listener: PaymentMethodsAdapter.Listener = mock()
 
     private val paymentMethodsAdapter: PaymentMethodsAdapter = PaymentMethodsAdapter(ARGS)
 
@@ -37,7 +35,6 @@ class PaymentMethodsAdapterTest {
 
     @BeforeTest
     fun setup() {
-        MockitoAnnotations.initMocks(this)
         paymentMethodsAdapter.registerAdapterDataObserver(adapterDataObserver)
     }
 
@@ -178,30 +175,10 @@ class PaymentMethodsAdapterTest {
             adapter.getItemId(0)
         )
 
-        assertEquals(
-            643895348L,
-            adapter.getItemId(1)
-        )
-
-        assertEquals(
-            91030075L,
-            adapter.getItemId(2)
-        )
-
-        assertEquals(
-            -420206809L,
-            adapter.getItemId(3)
-        )
-
-        assertEquals(
-            3046160L,
-            adapter.getItemId(4)
-        )
-
-        assertEquals(
-            101614L,
-            adapter.getItemId(5)
-        )
+        val uniqueItemIds = (1..5)
+            .map { adapter.getItemId(it) }
+            .toSet()
+        assertEquals(5, uniqueItemIds.size)
     }
 
     @Test
@@ -247,12 +224,48 @@ class PaymentMethodsAdapterTest {
         adapter.setPaymentMethods(PaymentMethodFixtures.CARD_PAYMENT_METHODS)
         adapter.listener = listener
 
-        val itemView = FrameLayout(context)
-        val viewHolder = PaymentMethodsAdapter.ViewHolder.GooglePayViewHolder(itemView)
+        val viewHolder = PaymentMethodsAdapter.ViewHolder.GooglePayViewHolder(
+            context, FrameLayout(context)
+        )
         adapter.onBindViewHolder(viewHolder, 0)
 
-        itemView.performClick()
+        viewHolder.itemView.performClick()
         verify(listener).onGooglePayClick()
+    }
+
+    @Test
+    fun getPosition_withValidPaymentMethod_returnsPosition() {
+        val adapter = PaymentMethodsAdapter(ARGS, shouldShowGooglePay = true)
+        adapter.setPaymentMethods(PaymentMethodFixtures.CARD_PAYMENT_METHODS)
+
+        assertEquals(
+            3,
+            adapter.getPosition(PaymentMethodFixtures.CARD_PAYMENT_METHODS.last())
+        )
+    }
+
+    @Test
+    fun getPosition_withInvalidPaymentMethod_returnsNull() {
+        val adapter = PaymentMethodsAdapter(ARGS, shouldShowGooglePay = true)
+        adapter.setPaymentMethods(PaymentMethodFixtures.CARD_PAYMENT_METHODS)
+
+        assertNull(adapter.getPosition(PaymentMethodFixtures.FPX_PAYMENT_METHOD))
+    }
+
+    @Test
+    fun deletePaymentMethod_withValidPaymentMethod_removesPaymentMethod() {
+        val adapter = PaymentMethodsAdapter(ARGS, shouldShowGooglePay = true)
+        adapter.registerAdapterDataObserver(adapterDataObserver)
+
+        adapter.setPaymentMethods(PaymentMethodFixtures.CARD_PAYMENT_METHODS)
+        assertTrue(
+            adapter.paymentMethods.contains(PaymentMethodFixtures.CARD_PAYMENT_METHODS.last())
+        )
+        adapter.deletePaymentMethod(PaymentMethodFixtures.CARD_PAYMENT_METHODS.last())
+        assertFalse(
+            adapter.paymentMethods.contains(PaymentMethodFixtures.CARD_PAYMENT_METHODS.last())
+        )
+        verify(adapterDataObserver).onItemRangeRemoved(3, 1)
     }
 
     private companion object {

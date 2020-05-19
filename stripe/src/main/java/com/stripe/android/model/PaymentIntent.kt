@@ -30,20 +30,24 @@ data class PaymentIntent internal constructor(
     override val paymentMethodTypes: List<String>,
 
     /**
-     * @return Amount intended to be collected by this PaymentIntent.
+     * @return Amount intended to be collected by this PaymentIntent. A positive integer
+     * representing how much to charge in the smallest currency unit (e.g., 100 cents to charge
+     * $1.00 or 100 to charge ¥100, a zero-decimal currency). The minimum amount is $0.50 US or
+     * equivalent in charge currency. The amount value supports up to eight digits (e.g., a value
+     * of 99999999 for a USD charge of $999,999.99).
      */
     val amount: Long?,
 
     /**
-     * @return Populated when status is canceled, this is the time at which the PaymentIntent
+     * @return Populated when `status` is `canceled`, this is the time at which the PaymentIntent
      * was canceled. Measured in seconds since the Unix epoch. If unavailable, will return 0.
      */
-    val canceledAt: Long,
+    val canceledAt: Long = 0L,
 
     /**
      * @return Reason for cancellation of this PaymentIntent
      */
-    val cancellationReason: CancellationReason?,
+    val cancellationReason: CancellationReason? = null,
 
     /**
      * @return One of `automatic` (default) or `manual`.
@@ -76,7 +80,7 @@ data class PaymentIntent internal constructor(
      * state after handling `next_action`s, and requires your server to initiate each
      * payment attempt with an explicit confirmation.
      */
-    val confirmationMethod: String?,
+    val confirmationMethod: String? = null,
 
     /**
      * @return Time at which the object was created. Measured in seconds since the Unix epoch.
@@ -91,7 +95,7 @@ data class PaymentIntent internal constructor(
     /**
      * @return An arbitrary string attached to the object. Often useful for displaying to users.
      */
-    override val description: String?,
+    override val description: String? = null,
 
     /**
      * @return Has the value `true` if the object exists in live mode or the value
@@ -103,31 +107,40 @@ data class PaymentIntent internal constructor(
      * @return If present, this property tells you what actions you need to take in order for your
      * customer to fulfill a payment using the provided source.
      */
-    val nextAction: Map<String, @RawValue Any?>?,
+    val nextAction: Map<String, @RawValue Any?>? = null,
+
+    override val paymentMethod: PaymentMethod? = null,
 
     /**
      * @return ID of the payment method (a PaymentMethod, Card, BankAccount, or saved Source object)
      * to attach to this PaymentIntent.
      */
-    override val paymentMethodId: String?,
+    override val paymentMethodId: String? = null,
 
     /**
      * @return Email address that the receipt for the resulting payment will be sent to.
      */
-    val receiptEmail: String?,
+    val receiptEmail: String? = null,
 
     /**
      * @return Status of this PaymentIntent.
      */
-    override val status: StripeIntent.Status?,
+    override val status: StripeIntent.Status? = null,
 
-    private val setupFutureUsage: StripeIntent.Usage?,
+    private val setupFutureUsage: StripeIntent.Usage? = null,
 
     /**
      * @return The payment error encountered in the previous PaymentIntent confirmation.
      */
-    val lastPaymentError: Error?
-) : StripeModel, StripeIntent {
+    val lastPaymentError: Error? = null,
+
+    /**
+     * @return Shipping information for this PaymentIntent.
+     */
+    val shipping: Shipping? = null,
+
+    internal val nextActionData: NextActionData? = null
+) : StripeIntent {
     @IgnoredOnParcel
     override val nextActionType: StripeIntent.NextActionType? = nextAction?.let {
         StripeIntent.NextActionType.fromCode(it[FIELD_NEXT_ACTION_TYPE] as String?)
@@ -253,6 +266,51 @@ data class PaymentIntent internal constructor(
         }
     }
 
+    /**
+     * Shipping information for this PaymentIntent.
+     *
+     * See [shipping](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-shipping)
+     */
+    @Parcelize
+    data class Shipping(
+        /**
+         * Shipping address.
+         *
+         * See [shipping.address](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-shipping-address)
+         */
+        val address: Address,
+
+        /**
+         * The delivery service that shipped a physical product, such as Fedex, UPS, USPS, etc.
+         *
+         * See [shipping.carrier](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-shipping-carrier)
+         */
+        val carrier: String? = null,
+
+        /**
+         * Recipient name.
+         *
+         * See [shipping.name](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-shipping-name)
+         */
+        val name: String? = null,
+
+        /**
+         * Recipient phone (including extension).
+         *
+         * See [shipping.phone](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-shipping-phone)
+         */
+        val phone: String? = null,
+
+        /**
+         * The tracking number for a physical product, obtained from the delivery service.
+         * If multiple tracking numbers were generated for this purchase, please separate them
+         * with commas.
+         *
+         * See [shipping.tracking_number](https://stripe.com/docs/api/payment_intents/object#payment_intent_object-shipping-tracking_number)
+         */
+        val trackingNumber: String? = null
+    ) : StripeModel
+
     internal data class ClientSecret(internal val value: String) {
         internal val paymentIntentId: String =
             value.split("_secret".toRegex())
@@ -265,10 +323,15 @@ data class PaymentIntent internal constructor(
         }
 
         private companion object {
-            private val PATTERN = Pattern.compile("^pi_([a-zA-Z0-9])+_secret_([a-zA-Z0-9])+$")
+            private val PATTERN = Pattern.compile("^pi_[^_]+_secret_[^_]+$")
         }
     }
 
+    /**
+     * Reason for cancellation of this PaymentIntent, either user-provided (duplicate, fraudulent,
+     * requested_by_customer, or abandoned) or generated by Stripe internally (failed_invoice,
+     * void_invoice, or automatic).
+     */
     enum class CancellationReason(private val code: String) {
         Duplicate("duplicate"),
         Fraudulent("fraudulent"),
@@ -285,13 +348,23 @@ data class PaymentIntent internal constructor(
         }
     }
 
+    internal sealed class NextActionData : StripeModel {
+        @Parcelize
+        internal data class DisplayOxxoDetails(
+            /**
+             * The timestamp after which the OXXO expires.
+             */
+            val expiresAfter: Int = 0,
+
+            /**
+             * The OXXO number.
+             */
+            val number: String? = null
+        ) : NextActionData()
+    }
+
     companion object {
         private const val FIELD_NEXT_ACTION_TYPE = "type"
-
-        internal fun parseIdFromClientSecret(clientSecret: String): String {
-            return clientSecret.split("_secret".toRegex())
-                .dropLastWhile { it.isEmpty() }.toTypedArray()[0]
-        }
 
         fun fromJson(jsonObject: JSONObject?): PaymentIntent? {
             return jsonObject?.let {

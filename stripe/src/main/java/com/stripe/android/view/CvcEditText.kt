@@ -10,8 +10,11 @@ import android.util.AttributeSet
 import android.view.View
 import com.google.android.material.textfield.TextInputLayout
 import com.stripe.android.R
-import com.stripe.android.model.Card
+import com.stripe.android.model.CardBrand
 
+/**
+ * A [StripeEditText] for CVC input.
+ */
 class CvcEditText @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -26,21 +29,17 @@ class CvcEditText @JvmOverloads constructor(
             return rawCvcValue.takeIf { isValid }
         }
 
-    private val rawCvcValue: String
+    internal val rawCvcValue: String
+        @JvmSynthetic
         get() {
-            return text.toString().trim()
+            return fieldText.trim()
         }
 
-    private var isAmex: Boolean = false
+    private var cardBrand: CardBrand = CardBrand.Unknown
 
     private val isValid: Boolean
         get() {
-            val cvcLength = rawCvcValue.length
-            return if (isAmex && cvcLength == Card.CVC_LENGTH_AMERICAN_EXPRESS) {
-                true
-            } else {
-                cvcLength == Card.CVC_LENGTH_COMMON
-            }
+            return cardBrand.isValidCvc(rawCvcValue)
         }
 
     // invoked when a valid CVC has been entered
@@ -48,9 +47,10 @@ class CvcEditText @JvmOverloads constructor(
     internal var completionCallback: () -> Unit = {}
 
     init {
+        setErrorMessage(resources.getString(R.string.invalid_cvc))
         setHint(R.string.cvc_number_hint)
         maxLines = 1
-        filters = INPUT_FILTER_AMEX
+        filters = createFilters(CardBrand.Unknown)
 
         inputType = InputType.TYPE_NUMBER_VARIATION_PASSWORD
         keyListener = DigitsKeyListener.getInstance(false, true)
@@ -61,34 +61,36 @@ class CvcEditText @JvmOverloads constructor(
 
         addTextChangedListener(object : StripeTextWatcher() {
             override fun afterTextChanged(s: Editable?) {
-                if (isValid) {
+                shouldShowError = false
+                if (cardBrand.isMaxCvc(rawCvcValue)) {
                     completionCallback()
                 }
             }
         })
     }
 
+    override val accessibilityText: String?
+        get() {
+            return resources.getString(R.string.acc_label_cvc_node, text)
+        }
+
     /**
-     * @param brand - the [Card.CardBrand] used to update the view
-     * @param customHintText - optional user-specified hint text
-     * @param textInputLayout - if specified, hint text will be set on this [TextInputLayout]
+     * @param cardBrand the [CardBrand] used to update the view
+     * @param customHintText optional user-specified hint text
+     * @param textInputLayout if specified, hint text will be set on this [TextInputLayout]
      * instead of directly on the [CvcEditText]
      */
     @JvmSynthetic
     internal fun updateBrand(
-        @Card.CardBrand brand: String,
+        cardBrand: CardBrand,
         customHintText: String? = null,
         textInputLayout: TextInputLayout? = null
     ) {
-        isAmex = Card.CardBrand.AMERICAN_EXPRESS == brand
-        filters = if (isAmex) {
-            INPUT_FILTER_AMEX
-        } else {
-            INPUT_FILTER_COMMON
-        }
+        this.cardBrand = cardBrand
+        filters = createFilters(cardBrand)
 
         val hintText = customHintText
-            ?: if (isAmex) {
+            ?: if (cardBrand == CardBrand.AmericanExpress) {
                 resources.getString(R.string.cvc_amex_hint)
             } else {
                 resources.getString(R.string.cvc_number_hint)
@@ -101,11 +103,7 @@ class CvcEditText @JvmOverloads constructor(
         }
     }
 
-    private companion object {
-        private val INPUT_FILTER_AMEX: Array<InputFilter> =
-            arrayOf(InputFilter.LengthFilter(Card.CVC_LENGTH_AMERICAN_EXPRESS))
-
-        private val INPUT_FILTER_COMMON: Array<InputFilter> =
-            arrayOf(InputFilter.LengthFilter(Card.CVC_LENGTH_COMMON))
+    private fun createFilters(cardBrand: CardBrand): Array<InputFilter> {
+        return arrayOf(InputFilter.LengthFilter(cardBrand.maxCvcLength))
     }
 }

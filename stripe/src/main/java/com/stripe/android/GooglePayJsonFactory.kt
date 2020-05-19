@@ -1,8 +1,10 @@
 package com.stripe.android
 
 import android.content.Context
+import android.os.Parcelable
 import java.util.Currency
 import java.util.Locale
+import kotlinx.android.parcel.Parcelize
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -11,12 +13,31 @@ import org.json.JSONObject
  * for Google Pay API version 2.0.
  */
 class GooglePayJsonFactory constructor(
-    private val googlePayConfig: GooglePayConfig
+    private val googlePayConfig: GooglePayConfig,
+
+    /**
+     * Enable JCB as an allowed card network. By default, JCB is disabled.
+     *
+     * JCB currently can only be accepted in Japan.
+     */
+    private val isJcbEnabled: Boolean = false
 ) {
     /**
      * [PaymentConfiguration] must be instantiated before calling this.
      */
-    constructor(context: Context) : this(GooglePayConfig(context))
+    constructor(
+        context: Context,
+
+        /**
+         * Enable JCB as an allowed card network. By default, JCB is disabled.
+         *
+         * JCB currently can only be accepted in Japan.
+         */
+        isJcbEnabled: Boolean = false
+    ) : this(
+        googlePayConfig = GooglePayConfig(context),
+        isJcbEnabled = isJcbEnabled
+    )
 
     /**
      * [IsReadyToPayRequest](https://developers.google.com/pay/api/android/reference/request-objects#IsReadyToPayRequest)
@@ -112,7 +133,7 @@ class GooglePayJsonFactory constructor(
             .put("totalPriceStatus", transactionInfo.totalPriceStatus.code)
             .apply {
                 transactionInfo.countryCode?.let {
-                    put("countryCode", it)
+                    put("countryCode", it.toUpperCase(Locale.ROOT))
                 }
 
                 transactionInfo.transactionId?.let {
@@ -141,10 +162,14 @@ class GooglePayJsonFactory constructor(
         shippingAddressParameters: ShippingAddressParameters
     ): JSONObject {
         return JSONObject()
-            .put("allowedCountryCodes",
-                JSONArray(shippingAddressParameters.allowedCountryCodes))
-            .put("phoneNumberRequired",
-                shippingAddressParameters.phoneNumberRequired)
+            .put(
+                "allowedCountryCodes",
+                JSONArray(shippingAddressParameters.normalizedAllowedCountryCodes)
+            )
+            .put(
+                "phoneNumberRequired",
+                shippingAddressParameters.phoneNumberRequired
+            )
     }
 
     private fun createCardPaymentMethod(
@@ -172,7 +197,11 @@ class GooglePayJsonFactory constructor(
     private fun createBaseCardPaymentMethodParams(): JSONObject {
         return JSONObject()
             .put("allowedAuthMethods", JSONArray(ALLOWED_AUTH_METHODS))
-            .put("allowedCardNetworks", JSONArray(ALLOWED_CARD_NETWORKS))
+            .put("allowedCardNetworks", JSONArray(
+                DEFAULT_CARD_NETWORKS.plus(
+                    listOf(JCB_CARD_NETWORK).takeIf { isJcbEnabled } ?: emptyList()
+                )
+            ))
     }
 
     /**
@@ -180,6 +209,7 @@ class GooglePayJsonFactory constructor(
      *
      * Configure additional fields to be returned for a requested billing address.
      */
+    @Parcelize
     data class BillingAddressParameters @JvmOverloads constructor(
         internal val isRequired: Boolean = false,
 
@@ -192,7 +222,7 @@ class GooglePayJsonFactory constructor(
          * Set to true if a phone number is required to process the transaction.
          */
         internal val isPhoneNumberRequired: Boolean = false
-    ) {
+    ) : Parcelable {
         /**
          * Billing address format required to complete the transaction.
          */
@@ -212,6 +242,7 @@ class GooglePayJsonFactory constructor(
     /**
      * [TransactionInfo](https://developers.google.com/pay/api/android/reference/request-objects#TransactionInfo)
      */
+    @Parcelize
     data class TransactionInfo @JvmOverloads constructor(
         /**
          * ISO 4217 alphabetic currency code.
@@ -254,7 +285,7 @@ class GooglePayJsonFactory constructor(
          * Affects the submit button text displayed in the Google Pay payment sheet.
          */
         internal val checkoutOption: CheckoutOption? = null
-    ) {
+    ) : Parcelable {
         /**
          * The status of the total price used.
          */
@@ -297,6 +328,7 @@ class GooglePayJsonFactory constructor(
     /**
      * [ShippingAddressParameters](https://developers.google.com/pay/api/android/reference/request-objects#ShippingAddressParameters)
      */
+    @Parcelize
     data class ShippingAddressParameters @JvmOverloads constructor(
         /**
          * Set to true to request a full shipping address.
@@ -307,16 +339,26 @@ class GooglePayJsonFactory constructor(
          * ISO 3166-1 alpha-2 country code values of the countries where shipping is allowed.
          * If this object isn't specified, all shipping address countries are allowed.
          */
-        internal val allowedCountryCodes: Set<String> = emptySet(),
+        private val allowedCountryCodes: Set<String> = emptySet(),
 
         /**
          * Set to true if a phone number is required for the provided shipping address.
          */
         internal val phoneNumberRequired: Boolean = false
-    ) {
+    ) : Parcelable {
+        /**
+         * Normalized form of [allowedCountryCodes] (i.e. capitalized country codes)
+         */
+        internal val normalizedAllowedCountryCodes: Set<String>
+            get() {
+                return allowedCountryCodes.map {
+                    it.toUpperCase(Locale.ROOT)
+                }.toSet()
+            }
+
         init {
             val countryCodes = Locale.getISOCountries()
-            allowedCountryCodes.forEach { allowedShippingCountryCode ->
+            normalizedAllowedCountryCodes.forEach { allowedShippingCountryCode ->
                 require(
                     countryCodes.any { allowedShippingCountryCode == it }
                 ) {
@@ -329,6 +371,7 @@ class GooglePayJsonFactory constructor(
     /**
      * [MerchantInfo](https://developers.google.com/pay/api/android/reference/request-objects#MerchantInfo)
      */
+    @Parcelize
     data class MerchantInfo(
         /**
          * Merchant name encoded as UTF-8. Merchant name is rendered in the payment sheet.
@@ -336,7 +379,7 @@ class GooglePayJsonFactory constructor(
          * message is displayed in the payment sheet.
          */
         internal val merchantName: String? = null
-    )
+    ) : Parcelable
 
     companion object {
         private const val API_VERSION = 2
@@ -345,7 +388,8 @@ class GooglePayJsonFactory constructor(
         private const val CARD_PAYMENT_METHOD = "CARD"
 
         private val ALLOWED_AUTH_METHODS = listOf("PAN_ONLY", "CRYPTOGRAM_3DS")
-        private val ALLOWED_CARD_NETWORKS =
-            listOf("AMEX", "DISCOVER", "INTERAC", "JCB", "MASTERCARD", "VISA")
+        private val DEFAULT_CARD_NETWORKS =
+            listOf("AMEX", "DISCOVER", "INTERAC", "MASTERCARD", "VISA")
+        private const val JCB_CARD_NETWORK = "JCB"
     }
 }

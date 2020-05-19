@@ -4,15 +4,17 @@ import android.content.Context
 import androidx.annotation.VisibleForTesting
 
 internal class FingerprintRequestFactory @VisibleForTesting internal constructor(
-    private val telemetryClientUtil: TelemetryClientUtil
-) : Factory0<FingerprintRequest> {
+    private val fingerprintRequestParamsFactory: FingerprintRequestParamsFactory
+) : Factory1<String?, FingerprintRequest> {
 
-    internal constructor(context: Context) : this(TelemetryClientUtil(context))
+    internal constructor(context: Context) : this(
+        fingerprintRequestParamsFactory = FingerprintRequestParamsFactory(context)
+    )
 
-    override fun create(): FingerprintRequest {
+    override fun create(arg: String?): FingerprintRequest {
         return FingerprintRequest(
-            telemetryClientUtil.createTelemetryMap(),
-            telemetryClientUtil.hashedUid
+            params = fingerprintRequestParamsFactory.createParams(),
+            guid = arg.orEmpty()
         )
     }
 }

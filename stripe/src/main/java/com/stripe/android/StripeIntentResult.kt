@@ -1,7 +1,10 @@
 package com.stripe.android
 
+import android.os.Parcel
 import androidx.annotation.IntDef
+import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.StripeIntent
+import com.stripe.android.model.StripeModel
 import java.util.Objects
 
 /**
@@ -13,7 +16,7 @@ import java.util.Objects
 abstract class StripeIntentResult<T : StripeIntent> internal constructor(
     val intent: T,
     @Outcome outcome: Int
-) {
+) : StripeModel {
     @Outcome
     @get:Outcome
     val outcome: Int = determineOutcome(intent.status, outcome)
@@ -40,7 +43,11 @@ abstract class StripeIntentResult<T : StripeIntent> internal constructor(
                 return Outcome.SUCCEEDED
             }
             StripeIntent.Status.Processing -> {
-                return Outcome.UNKNOWN
+                return if (PROCESSING_IS_SUCCESS.contains(intent.paymentMethod?.type)) {
+                    Outcome.SUCCEEDED
+                } else {
+                    Outcome.UNKNOWN
+                }
             }
             else -> {
                 return Outcome.UNKNOWN
@@ -62,6 +69,15 @@ abstract class StripeIntentResult<T : StripeIntent> internal constructor(
 
     override fun hashCode(): Int {
         return Objects.hash(intent, outcome)
+    }
+
+    override fun describeContents(): Int {
+        return 0
+    }
+
+    override fun writeToParcel(dest: Parcel, flags: Int) {
+        dest.writeParcelable(intent, flags)
+        dest.writeInt(outcome)
     }
 
     /**
@@ -93,5 +109,14 @@ abstract class StripeIntentResult<T : StripeIntent> internal constructor(
              */
             const val TIMEDOUT: Int = 4
         }
+    }
+
+    private companion object {
+        private val PROCESSING_IS_SUCCESS = setOf(
+            PaymentMethod.Type.SepaDebit,
+            PaymentMethod.Type.BacsDebit,
+            PaymentMethod.Type.AuBecsDebit,
+            PaymentMethod.Type.Sofort
+        )
     }
 }

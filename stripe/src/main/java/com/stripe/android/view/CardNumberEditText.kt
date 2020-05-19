@@ -1,15 +1,16 @@
 package com.stripe.android.view
 
 import android.content.Context
+import android.os.Build
 import android.text.Editable
 import android.text.InputFilter
 import android.util.AttributeSet
-import android.view.accessibility.AccessibilityNodeInfo
+import android.view.View
 import androidx.annotation.VisibleForTesting
 import com.stripe.android.CardUtils
 import com.stripe.android.R
 import com.stripe.android.StripeTextUtils
-import com.stripe.android.model.Card
+import com.stripe.android.model.CardBrand
 
 /**
  * A [StripeEditText] that handles spacing out the digits of a credit card.
@@ -21,13 +22,18 @@ class CardNumberEditText @JvmOverloads constructor(
 ) : StripeEditText(context, attrs, defStyleAttr) {
 
     @VisibleForTesting
-    @Card.CardBrand
-    @get:Card.CardBrand
-    var cardBrand: String = Card.CardBrand.UNKNOWN
-        internal set
+    var cardBrand: CardBrand = CardBrand.Unknown
+        internal set(value) {
+            val prevBrand = field
+            field = value
+            if (value != prevBrand) {
+                brandChangeCallback(cardBrand)
+                updateLengthFilter()
+            }
+        }
 
     @JvmSynthetic
-    internal var brandChangeCallback: (String) -> Unit = {}
+    internal var brandChangeCallback: (CardBrand) -> Unit = {}
         set(callback) {
             field = callback
 
@@ -40,8 +46,10 @@ class CardNumberEditText @JvmOverloads constructor(
     @JvmSynthetic
     internal var completionCallback: () -> Unit = {}
 
-    var lengthMax: Int = MAX_LENGTH_COMMON
-        private set
+    val lengthMax: Int
+        get() {
+            return cardBrand.getMaxLengthWithSpacesForCardNumber(fieldText)
+        }
 
     private var ignoreChanges = false
 
@@ -66,13 +74,18 @@ class CardNumberEditText @JvmOverloads constructor(
         }
 
     init {
+        setErrorMessage(resources.getString(R.string.invalid_card_number))
         listenForTextChanges()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            setAutofillHints(View.AUTOFILL_HINT_CREDIT_CARD_NUMBER)
+        }
     }
 
-    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
-        super.onInitializeAccessibilityNodeInfo(info)
-        info.text = resources.getString(R.string.acc_label_card_number_node, text)
-    }
+    override val accessibilityText: String?
+        get() {
+            return resources.getString(R.string.acc_label_card_number_node, text)
+        }
 
     @JvmSynthetic
     internal fun updateLengthFilter() {
@@ -96,11 +109,7 @@ class CardNumberEditText @JvmOverloads constructor(
         editActionAddition: Int
     ): Int {
         var gapsJumped = 0
-        val gapSet = if (Card.CardBrand.AMERICAN_EXPRESS == cardBrand) {
-            SPACE_SET_AMEX
-        } else {
-            SPACE_SET_COMMON
-        }
+        val gapSet = cardBrand.getSpacePositionsForCardNumber(fieldText)
 
         var skipBack = false
         gapSet.forEach { gap ->
@@ -160,10 +169,7 @@ class CardNumberEditText @JvmOverloads constructor(
                 val spacelessNumber = StripeTextUtils.removeSpacesAndHyphens(inputText)
                     ?: return
 
-                val formattedNumber = createFormattedNumber(
-                    ViewUtils.separateCardNumberGroups(spacelessNumber, cardBrand)
-                )
-
+                val formattedNumber = cardBrand.formatNumber(spacelessNumber)
                 this.newCursorPosition = updateSelectionIndex(formattedNumber.length,
                     latestChangeStart, latestInsertionSize)
                 this.formattedNumber = formattedNumber
@@ -175,10 +181,10 @@ class CardNumberEditText @JvmOverloads constructor(
                 }
 
                 ignoreChanges = true
-                if (formattedNumber != null) {
+                if (!isLastKeyDelete && formattedNumber != null) {
                     setText(formattedNumber)
                     newCursorPosition?.let {
-                        setSelection(it)
+                        setSelection(it.coerceIn(0, fieldText.length))
                     }
                 }
                 formattedNumber = null
@@ -187,10 +193,10 @@ class CardNumberEditText @JvmOverloads constructor(
                 ignoreChanges = false
 
                 if (fieldText.length == lengthMax) {
-                    val before = isCardNumberValid
+                    val wasCardNumberValid = isCardNumberValid
                     isCardNumberValid = CardUtils.isValidCardNumber(fieldText)
                     shouldShowError = !isCardNumberValid
-                    if (!before && isCardNumberValid) {
+                    if (!wasCardNumberValid && isCardNumberValid) {
                         completionCallback()
                     }
                 } else {
@@ -202,50 +208,8 @@ class CardNumberEditText @JvmOverloads constructor(
         })
     }
 
-    private fun updateCardBrand(@Card.CardBrand brand: String) {
-        if (cardBrand == brand) {
-            return
-        }
-
-        cardBrand = brand
-
-        brandChangeCallback(cardBrand)
-
-        val oldLength = lengthMax
-        lengthMax = getLengthForBrand(cardBrand)
-        if (oldLength == lengthMax) {
-            return
-        }
-
-        updateLengthFilter()
-    }
-
-    private fun updateCardBrandFromNumber(partialNumber: String) {
-        updateCardBrand(CardUtils.getPossibleCardType(partialNumber))
-    }
-
-    internal companion object {
-        private const val MAX_LENGTH_COMMON = 19
-        // Note that AmEx and Diners Club have the same length
-        // because Diners Club has one more space, but one less digit.
-        private const val MAX_LENGTH_AMEX_DINERS = 17
-
-        private val SPACE_SET_COMMON = setOf(4, 9, 14)
-        private val SPACE_SET_AMEX = setOf(4, 11)
-
-        private fun getLengthForBrand(@Card.CardBrand cardBrand: String): Int {
-            return when (cardBrand) {
-                Card.CardBrand.AMERICAN_EXPRESS, Card.CardBrand.DINERS_CLUB ->
-                    MAX_LENGTH_AMEX_DINERS
-                else -> MAX_LENGTH_COMMON
-            }
-        }
-
-        @JvmSynthetic
-        internal fun createFormattedNumber(cardParts: Array<String?>): String {
-            return cardParts
-                .takeWhile { it != null }
-                .joinToString(" ")
-        }
+    @JvmSynthetic
+    internal fun updateCardBrandFromNumber(partialNumber: String) {
+        cardBrand = CardUtils.getPossibleCardBrand(partialNumber)
     }
 }

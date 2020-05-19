@@ -3,9 +3,8 @@ package com.stripe.android
 import android.app.Activity
 import android.content.Context
 import android.os.Handler
-import androidx.annotation.RestrictTo
+import androidx.annotation.IntRange
 import androidx.annotation.VisibleForTesting
-import com.stripe.android.PaymentConfiguration.Companion.getInstance
 import com.stripe.android.Stripe.Companion.appInfo
 import com.stripe.android.exception.StripeException
 import com.stripe.android.model.Customer
@@ -26,61 +25,31 @@ import java.util.concurrent.TimeUnit
  */
 class CustomerSession @VisibleForTesting internal constructor(
     context: Context,
-    keyProvider: EphemeralKeyProvider,
-    private val proxyNowCalendar: Calendar? = null,
-    private val threadPoolExecutor: ThreadPoolExecutor,
     stripeRepository: StripeRepository,
     publishableKey: String,
     stripeAccountId: String?,
-    shouldPrefetchEphemeralKey: Boolean
+    private val threadPoolExecutor: ThreadPoolExecutor = createThreadPoolExecutor(),
+    private val operationIdFactory: OperationIdFactory = StripeOperationIdFactory(),
+    private val timeSupplier: TimeSupplier = { Calendar.getInstance().timeInMillis },
+    ephemeralKeyManagerFactory: EphemeralKeyManager.Factory
 ) {
     @JvmSynthetic
     internal var customerCacheTime: Long = 0
     @JvmSynthetic
     internal var customer: Customer? = null
 
-    private val operationIdFactory = StripeOperationIdFactory()
-    private val productUsage = CustomerSessionProductUsage()
     private val listeners: MutableMap<String, RetrievalListener?> = mutableMapOf()
-    private val ephemeralKeyManager: EphemeralKeyManager
-
-    init {
-        val keyManagerListener = CustomerSessionEphemeralKeyManagerListener(
+    private val ephemeralKeyManager: EphemeralKeyManager = ephemeralKeyManagerFactory.create(
+        CustomerSessionEphemeralKeyManagerListener(
             CustomerSessionRunnableFactory(
                 stripeRepository,
                 createHandler(),
                 publishableKey,
-                stripeAccountId,
-                productUsage
+                stripeAccountId
             ),
-            threadPoolExecutor, listeners, productUsage)
-        ephemeralKeyManager = EphemeralKeyManager(
-            keyProvider,
-            keyManagerListener,
-            KEY_REFRESH_BUFFER_IN_SECONDS,
-            proxyNowCalendar,
-            operationIdFactory,
-            shouldPrefetchEphemeralKey
+            threadPoolExecutor,
+            listeners
         )
-    }
-
-    @VisibleForTesting
-    internal val productUsageTokens: Set<String>
-        get() {
-            return productUsage.get()
-        }
-
-    private constructor(
-        context: Context,
-        keyProvider: EphemeralKeyProvider,
-        appInfo: AppInfo?,
-        publishableKey: String,
-        stripeAccountId: String?,
-        shouldPrefetchEphemeralKey: Boolean
-    ) : this(
-        context, keyProvider, null, createThreadPoolExecutor(),
-        StripeApiRepository(context, appInfo), publishableKey, stripeAccountId,
-        shouldPrefetchEphemeralKey
     )
 
     private fun createHandler(): Handler {
@@ -90,7 +59,7 @@ class CustomerSession @VisibleForTesting internal constructor(
                 operationId: String
             ) {
                 this@CustomerSession.customer = customer
-                customerCacheTime = getCalendarInstance().timeInMillis
+                customerCacheTime = timeSupplier()
                 val listener: CustomerRetrievalListener? = getListener(operationId)
                 if (customer != null) {
                     listener?.onCustomerRetrieved(customer)
@@ -145,12 +114,6 @@ class CustomerSession @VisibleForTesting internal constructor(
         })
     }
 
-    @RestrictTo(RestrictTo.Scope.LIBRARY)
-    @JvmSynthetic
-    internal fun addProductUsageTokenIfValid(token: String?) {
-        productUsage.add(token)
-    }
-
     /**
      * Retrieve the current [Customer]. If [customer] is not stale, this returns immediately with
      * the cache. If not, it fetches a new value and returns that to the listener.
@@ -159,9 +122,17 @@ class CustomerSession @VisibleForTesting internal constructor(
      * customer, either from the cache or from the server
      */
     fun retrieveCurrentCustomer(listener: CustomerRetrievalListener) {
+        retrieveCurrentCustomer(emptySet(), listener)
+    }
+
+    @JvmSynthetic
+    internal fun retrieveCurrentCustomer(
+        productUsage: Set<String>,
+        listener: CustomerRetrievalListener
+    ) {
         cachedCustomer?.let {
             listener.onCustomerRetrieved(it)
-        } ?: updateCurrentCustomer(listener)
+        } ?: updateCurrentCustomer(productUsage, listener)
     }
 
     /**
@@ -171,8 +142,22 @@ class CustomerSession @VisibleForTesting internal constructor(
      * the customer from the server
      */
     fun updateCurrentCustomer(listener: CustomerRetrievalListener) {
+        updateCurrentCustomer(emptySet(), listener)
+    }
+
+    @JvmSynthetic
+    internal fun updateCurrentCustomer(
+        productUsage: Set<String>,
+        listener: CustomerRetrievalListener
+    ) {
         customer = null
-        startOperation(null, null, listener)
+        startOperation(
+            EphemeralOperation.RetrieveKey(
+                id = operationIdFactory.create(),
+                productUsage = productUsage
+            ),
+            listener
+        )
     }
 
     /**
@@ -198,11 +183,25 @@ class CustomerSession @VisibleForTesting internal constructor(
         @SourceType sourceType: String,
         listener: SourceRetrievalListener
     ) {
-        val arguments = mapOf(
-            KEY_SOURCE to sourceId,
-            KEY_SOURCE_TYPE to sourceType
+        addCustomerSource(sourceId, sourceType, emptySet(), listener)
+    }
+
+    @JvmSynthetic
+    internal fun addCustomerSource(
+        sourceId: String,
+        @SourceType sourceType: String,
+        productUsage: Set<String>,
+        listener: SourceRetrievalListener
+    ) {
+        startOperation(
+            EphemeralOperation.Customer.AddSource(
+                sourceId = sourceId,
+                sourceType = sourceType,
+                id = operationIdFactory.create(),
+                productUsage = productUsage
+            ),
+            listener
         )
-        startOperation(ACTION_ADD_SOURCE, arguments, listener)
     }
 
     /**
@@ -216,10 +215,23 @@ class CustomerSession @VisibleForTesting internal constructor(
         sourceId: String,
         listener: SourceRetrievalListener
     ) {
-        val arguments = mapOf(
-            KEY_SOURCE to sourceId
+        deleteCustomerSource(sourceId, emptySet(), listener)
+    }
+
+    @JvmSynthetic
+    internal fun deleteCustomerSource(
+        sourceId: String,
+        productUsage: Set<String>,
+        listener: SourceRetrievalListener
+    ) {
+        startOperation(
+            EphemeralOperation.Customer.DeleteSource(
+                sourceId = sourceId,
+                id = operationIdFactory.create(),
+                productUsage = productUsage
+            ),
+            listener
         )
-        startOperation(ACTION_DELETE_SOURCE, arguments, listener)
     }
 
     /**
@@ -233,10 +245,23 @@ class CustomerSession @VisibleForTesting internal constructor(
         paymentMethodId: String,
         listener: PaymentMethodRetrievalListener
     ) {
-        val arguments = mapOf(
-            KEY_PAYMENT_METHOD to paymentMethodId
+        attachPaymentMethod(paymentMethodId, emptySet(), listener)
+    }
+
+    @JvmSynthetic
+    internal fun attachPaymentMethod(
+        paymentMethodId: String,
+        productUsage: Set<String>,
+        listener: PaymentMethodRetrievalListener
+    ) {
+        startOperation(
+            EphemeralOperation.Customer.AttachPaymentMethod(
+                paymentMethodId = paymentMethodId,
+                id = operationIdFactory.create(),
+                productUsage = productUsage
+            ),
+            listener
         )
-        startOperation(ACTION_ATTACH_PAYMENT_METHOD, arguments, listener)
     }
 
     /**
@@ -250,28 +275,94 @@ class CustomerSession @VisibleForTesting internal constructor(
         paymentMethodId: String,
         listener: PaymentMethodRetrievalListener
     ) {
-        val arguments = mapOf(
-            KEY_PAYMENT_METHOD to paymentMethodId
+        detachPaymentMethod(paymentMethodId, emptySet(), listener)
+    }
+
+    @JvmSynthetic
+    internal fun detachPaymentMethod(
+        paymentMethodId: String,
+        productUsage: Set<String>,
+        listener: PaymentMethodRetrievalListener
+    ) {
+        startOperation(
+            EphemeralOperation.Customer.DetachPaymentMethod(
+                paymentMethodId = paymentMethodId,
+                id = operationIdFactory.create(),
+                productUsage = productUsage
+            ),
+            listener
         )
-        startOperation(ACTION_DETACH_PAYMENT_METHOD, arguments, listener)
     }
 
     /**
-     * Retrieves all of the customer's PaymentMethod objects,
-     * filtered by a [PaymentMethod.Type].
+     * Retrieves all of the customer's PaymentMethod objects, filtered by a [PaymentMethod.Type].
+     *
+     * See [List a Customer's PaymentMethods](https://stripe.com/docs/api/payment_methods/list)
      *
      * @param paymentMethodType the [PaymentMethod.Type] to filter by
      * @param listener a [PaymentMethodRetrievalListener] called when the API call
      * completes with a list of [PaymentMethod] objects
+     *
+     * @param limit Optional. A limit on the number of objects to be returned. Limit can range
+     * between 1 and 100, and the default is 10.
+     * @param endingBefore Optional. A cursor for use in pagination. `ending_before` is an object
+     * ID that defines your place in the list. For instance, if you make a list request and receive
+     * 100 objects, starting with `obj_bar`, your subsequent call can include
+     * `ending_before=obj_bar` in order to fetch the previous page of the list.
+     * @param startingAfter Optional. A cursor for use in pagination. `starting_after` is an object
+     * ID that defines your place in the list. For instance, if you make a list request and receive
+     * 100 objects, ending with `obj_foo`, your subsequent call can include `starting_after=obj_foo`
+     * in order to fetch the next page of the list.
      */
+    @JvmOverloads
+    fun getPaymentMethods(
+        paymentMethodType: PaymentMethod.Type,
+        @IntRange(from = 1, to = 100) limit: Int?,
+        endingBefore: String? = null,
+        startingAfter: String? = null,
+        listener: PaymentMethodsRetrievalListener
+    ) {
+        getPaymentMethods(
+            paymentMethodType = paymentMethodType,
+            limit = limit,
+            endingBefore = endingBefore,
+            startingAfter = startingAfter,
+            productUsage = emptySet(),
+            listener = listener
+        )
+    }
+
+    @JvmSynthetic
+    internal fun getPaymentMethods(
+        paymentMethodType: PaymentMethod.Type,
+        @IntRange(from = 1, to = 100) limit: Int? = null,
+        endingBefore: String? = null,
+        startingAfter: String? = null,
+        productUsage: Set<String>,
+        listener: PaymentMethodsRetrievalListener
+    ) {
+        startOperation(
+            EphemeralOperation.Customer.GetPaymentMethods(
+                type = paymentMethodType,
+                limit = limit,
+                endingBefore = endingBefore,
+                startingAfter = startingAfter,
+                id = operationIdFactory.create(),
+                productUsage = productUsage
+            ),
+            listener
+        )
+    }
+
     fun getPaymentMethods(
         paymentMethodType: PaymentMethod.Type,
         listener: PaymentMethodsRetrievalListener
     ) {
-        val arguments = mapOf(
-            KEY_PAYMENT_METHOD_TYPE to paymentMethodType.code
+        getPaymentMethods(
+            paymentMethodType = paymentMethodType,
+            productUsage = emptySet(),
+            listener = listener
         )
-        startOperation(ACTION_GET_PAYMENT_METHODS, arguments, listener)
     }
 
     /**
@@ -283,10 +374,23 @@ class CustomerSession @VisibleForTesting internal constructor(
         shippingInformation: ShippingInformation,
         listener: CustomerRetrievalListener
     ) {
-        val arguments = mapOf(
-            KEY_SHIPPING_INFO to shippingInformation
+        setCustomerShippingInformation(shippingInformation, emptySet(), listener)
+    }
+
+    @JvmSynthetic
+    internal fun setCustomerShippingInformation(
+        shippingInformation: ShippingInformation,
+        productUsage: Set<String>,
+        listener: CustomerRetrievalListener
+    ) {
+        startOperation(
+            EphemeralOperation.Customer.UpdateShipping(
+                shippingInformation = shippingInformation,
+                id = operationIdFactory.create(),
+                productUsage = productUsage
+            ),
+            listener
         )
-        startOperation(ACTION_SET_CUSTOMER_SHIPPING_INFO, arguments, listener)
     }
 
     /**
@@ -301,33 +405,39 @@ class CustomerSession @VisibleForTesting internal constructor(
         @SourceType sourceType: String,
         listener: CustomerRetrievalListener
     ) {
-        val arguments = mapOf(
-            KEY_SOURCE to sourceId,
-            KEY_SOURCE_TYPE to sourceType
-        )
-        startOperation(ACTION_SET_DEFAULT_SOURCE, arguments, listener)
-    }
-
-    private fun startOperation(
-        action: String?,
-        arguments: Map<String, Any>?,
-        listener: RetrievalListener?
-    ) {
-        val operationId = operationIdFactory.create()
-        listeners[operationId] = listener
-        ephemeralKeyManager.retrieveEphemeralKey(operationId, action, arguments)
+        setCustomerDefaultSource(sourceId, sourceType, emptySet(), listener)
     }
 
     @JvmSynthetic
-    internal fun resetUsageTokens() {
-        productUsage.reset()
+    internal fun setCustomerDefaultSource(
+        sourceId: String,
+        @SourceType sourceType: String,
+        productUsage: Set<String>,
+        listener: CustomerRetrievalListener
+    ) {
+        startOperation(
+            EphemeralOperation.Customer.UpdateDefaultSource(
+                sourceId = sourceId,
+                sourceType = sourceType,
+                id = operationIdFactory.create(),
+                productUsage = productUsage
+            ),
+            listener
+        )
+    }
+
+    private fun startOperation(
+        operation: EphemeralOperation,
+        listener: RetrievalListener?
+    ) {
+        listeners[operation.id] = listener
+        ephemeralKeyManager.retrieveEphemeralKey(operation)
     }
 
     private val canUseCachedCustomer: Boolean
         get() {
-            val currentTime = getCalendarInstance().timeInMillis
             return customer != null &&
-                currentTime - customerCacheTime < CUSTOMER_CACHE_DURATION_MILLISECONDS
+                timeSupplier() - customerCacheTime < CUSTOMER_CACHE_DURATION_MILLISECONDS
         }
 
     private fun handleRetrievalError(
@@ -342,11 +452,6 @@ class CustomerSession @VisibleForTesting internal constructor(
                 exception.stripeError
             )
         }
-        resetUsageTokens()
-    }
-
-    private fun getCalendarInstance(): Calendar {
-        return proxyNowCalendar ?: Calendar.getInstance()
     }
 
     private fun <L : RetrievalListener?> getListener(operationId: String): L? {
@@ -410,26 +515,12 @@ class CustomerSession @VisibleForTesting internal constructor(
     }
 
     companion object {
-        internal const val ACTION_ADD_SOURCE = "add_source"
-        internal const val ACTION_DELETE_SOURCE = "delete_source"
-        internal const val ACTION_ATTACH_PAYMENT_METHOD = "attach_payment_method"
-        internal const val ACTION_DETACH_PAYMENT_METHOD = "detach_payment_method"
-        internal const val ACTION_GET_PAYMENT_METHODS = "get_payment_methods"
-        internal const val ACTION_SET_DEFAULT_SOURCE = "default_source"
-        internal const val ACTION_SET_CUSTOMER_SHIPPING_INFO = "set_shipping_info"
-        internal const val KEY_PAYMENT_METHOD = "payment_method"
-        internal const val KEY_PAYMENT_METHOD_TYPE = "payment_method_type"
-        internal const val KEY_SOURCE = "source"
-        internal const val KEY_SOURCE_TYPE = "source_type"
-        internal const val KEY_SHIPPING_INFO = "shipping_info"
-
         // The maximum number of active threads we support
         private const val THREAD_POOL_SIZE = 3
         // Sets the amount of time an idle thread waits before terminating
         private const val KEEP_ALIVE_TIME = 2
         // Sets the Time Unit to seconds
         private val KEEP_ALIVE_TIME_UNIT = TimeUnit.SECONDS
-        private const val KEY_REFRESH_BUFFER_IN_SECONDS = 30L
         private val CUSTOMER_CACHE_DURATION_MILLISECONDS = TimeUnit.MINUTES.toMillis(1)
 
         /**
@@ -455,8 +546,26 @@ class CustomerSession @VisibleForTesting internal constructor(
             stripeAccountId: String? = null,
             shouldPrefetchEphemeralKey: Boolean = true
         ) {
-            instance = CustomerSession(context, ephemeralKeyProvider, appInfo,
-                getInstance(context).publishableKey, stripeAccountId, shouldPrefetchEphemeralKey)
+            val operationIdFactory = StripeOperationIdFactory()
+            val timeSupplier = { Calendar.getInstance().timeInMillis }
+            val ephemeralKeyManagerFactory = EphemeralKeyManager.Factory.Default(
+                keyProvider = ephemeralKeyProvider,
+                shouldPrefetchEphemeralKey = shouldPrefetchEphemeralKey,
+                operationIdFactory = operationIdFactory,
+                timeSupplier = timeSupplier
+            )
+
+            val publishableKey = PaymentConfiguration.getInstance(context).publishableKey
+            instance = CustomerSession(
+                context,
+                StripeApiRepository(context, publishableKey, appInfo),
+                publishableKey,
+                stripeAccountId,
+                createThreadPoolExecutor(),
+                operationIdFactory,
+                timeSupplier,
+                ephemeralKeyManagerFactory
+            )
         }
 
         /**
@@ -531,3 +640,5 @@ class CustomerSession @VisibleForTesting internal constructor(
         }
     }
 }
+
+internal typealias TimeSupplier = () -> Long

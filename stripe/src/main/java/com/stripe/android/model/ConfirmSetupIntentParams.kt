@@ -1,29 +1,45 @@
 package com.stripe.android.model
 
-import androidx.annotation.VisibleForTesting
-import com.stripe.android.ObjectBuilder
+import android.os.Parcelable
 import com.stripe.android.model.ConfirmStripeIntentParams.Companion.PARAM_CLIENT_SECRET
+import com.stripe.android.model.ConfirmStripeIntentParams.Companion.PARAM_MANDATE_DATA
+import com.stripe.android.model.ConfirmStripeIntentParams.Companion.PARAM_MANDATE_ID
 import com.stripe.android.model.ConfirmStripeIntentParams.Companion.PARAM_PAYMENT_METHOD_DATA
 import com.stripe.android.model.ConfirmStripeIntentParams.Companion.PARAM_PAYMENT_METHOD_ID
 import com.stripe.android.model.ConfirmStripeIntentParams.Companion.PARAM_RETURN_URL
 import com.stripe.android.model.ConfirmStripeIntentParams.Companion.PARAM_USE_STRIPE_SDK
+import kotlinx.android.parcel.Parcelize
 
+/**
+ * Model representing parameters for [confirming a SetupIntent](https://stripe.com/docs/api/setup_intents/confirm).
+ */
+@Parcelize
 data class ConfirmSetupIntentParams internal constructor(
     @get:JvmSynthetic override val clientSecret: String,
     @get:JvmSynthetic internal val paymentMethodId: String? = null,
     @get:JvmSynthetic internal val paymentMethodCreateParams: PaymentMethodCreateParams? = null,
     private val returnUrl: String? = null,
-    private val useStripeSdk: Boolean
-) : ConfirmStripeIntentParams {
+    private val useStripeSdk: Boolean = false,
+
+    /**
+     * ID of the mandate to be used for this payment.
+     */
+    private val mandateId: String? = null,
+
+    /**
+     * This hash contains details about the Mandate to create.
+     *
+     * [mandate_data](https://stripe.com/docs/api/setup_intents/confirm#confirm_setup_intent-mandate_data)
+     */
+    private val mandateData: MandateDataParams? = null
+) : ConfirmStripeIntentParams, Parcelable {
 
     override fun shouldUseStripeSdk(): Boolean {
         return useStripeSdk
     }
 
     override fun withShouldUseStripeSdk(shouldUseStripeSdk: Boolean): ConfirmSetupIntentParams {
-        return toBuilder()
-            .setShouldUseSdk(shouldUseStripeSdk)
-            .build()
+        return copy(useStripeSdk = shouldUseStripeSdk)
     }
 
     /**
@@ -33,73 +49,47 @@ data class ConfirmSetupIntentParams internal constructor(
      * @return a String-keyed map
      */
     override fun toParamMap(): Map<String, Any> {
-        val params = mapOf(
+        return mapOf(
             PARAM_CLIENT_SECRET to clientSecret,
             PARAM_USE_STRIPE_SDK to useStripeSdk
         ).plus(
             returnUrl?.let { mapOf(PARAM_RETURN_URL to it) }.orEmpty()
-        ).toMutableMap()
+        ).plus(
+            mandateId?.let { mapOf(PARAM_MANDATE_ID to it) }.orEmpty()
+        ).plus(
+            mandateDataParams?.let { mapOf(PARAM_MANDATE_DATA to it) }.orEmpty()
+        ).plus(paymentMethodParamMap)
+    }
 
-        if (paymentMethodCreateParams != null) {
-            params[PARAM_PAYMENT_METHOD_DATA] = paymentMethodCreateParams.toParamMap()
-            if (paymentMethodCreateParams.type.hasMandate) {
-                params[MandateData.PARAM_MANDATE_DATA] = MandateData().toParamMap()
+    private val paymentMethodParamMap: Map<String, Any>
+        get() {
+            return when {
+                paymentMethodCreateParams != null -> {
+                    mapOf(PARAM_PAYMENT_METHOD_DATA to paymentMethodCreateParams.toParamMap())
+                }
+                paymentMethodId != null -> {
+                    mapOf(PARAM_PAYMENT_METHOD_ID to paymentMethodId)
+                }
+                else -> {
+                    emptyMap()
+                }
             }
-        } else if (paymentMethodId != null) {
-            params[PARAM_PAYMENT_METHOD_ID] = paymentMethodId
         }
 
-        return params.toMap()
-    }
-
-    @VisibleForTesting
-    internal fun toBuilder(): Builder {
-        val builder = Builder(clientSecret)
-            .setReturnUrl(returnUrl)
-            .setShouldUseSdk(useStripeSdk)
-
-        paymentMethodId?.let { builder.setPaymentMethodId(it) }
-        paymentMethodCreateParams?.let { builder.setPaymentMethodCreateParams(it) }
-
-        return builder
-    }
-
-    internal class Builder internal constructor(
-        private val clientSecret: String
-    ) : ObjectBuilder<ConfirmSetupIntentParams> {
-        private var paymentMethodId: String? = null
-        private var paymentMethodCreateParams: PaymentMethodCreateParams? = null
-        private var returnUrl: String? = null
-        private var useStripeSdk: Boolean = false
-
-        internal fun setPaymentMethodId(paymentMethodId: String): Builder = apply {
-            this.paymentMethodId = paymentMethodId
+    /**
+     * Use the user-defined [MandateDataParams] if specified, otherwise create a default
+     * [MandateDataParams] if necessary.
+     */
+    private val mandateDataParams: Map<String, Any>?
+        get() {
+            return mandateData?.toParamMap()
+                ?: if (paymentMethodCreateParams?.type?.hasMandate == true && mandateId == null) {
+                    // Populate with default "online" MandateData
+                    MandateDataParams(MandateDataParams.Type.Online.DEFAULT).toParamMap()
+                } else {
+                    null
+                }
         }
-
-        internal fun setPaymentMethodCreateParams(
-            paymentMethodCreateParams: PaymentMethodCreateParams
-        ): Builder = apply {
-            this.paymentMethodCreateParams = paymentMethodCreateParams
-        }
-
-        internal fun setReturnUrl(returnUrl: String?): Builder = apply {
-            this.returnUrl = returnUrl
-        }
-
-        internal fun setShouldUseSdk(useStripeSdk: Boolean): Builder = apply {
-            this.useStripeSdk = useStripeSdk
-        }
-
-        override fun build(): ConfirmSetupIntentParams {
-            return ConfirmSetupIntentParams(
-                clientSecret = clientSecret,
-                returnUrl = returnUrl,
-                paymentMethodId = paymentMethodId,
-                paymentMethodCreateParams = paymentMethodCreateParams,
-                useStripeSdk = useStripeSdk
-            )
-        }
-    }
 
     companion object {
         /**
@@ -120,9 +110,10 @@ data class ConfirmSetupIntentParams internal constructor(
             clientSecret: String,
             returnUrl: String? = null
         ): ConfirmSetupIntentParams {
-            return Builder(clientSecret)
-                .setReturnUrl(returnUrl)
-                .build()
+            return ConfirmSetupIntentParams(
+                clientSecret = clientSecret,
+                returnUrl = returnUrl
+            )
         }
 
         /**
@@ -135,6 +126,8 @@ data class ConfirmSetupIntentParams internal constructor(
          * @param returnUrl The URL to redirect your customer back to after they authenticate on the payment method’s app or site.
          * If you’d prefer to redirect to a mobile application, you can alternatively supply an application URI scheme.
          * This parameter is only used for cards and other redirect-based payment methods.
+         * @param mandateId optional ID of the Mandate to be used for this payment.
+         * @param mandateData optional details about the Mandate to create.
          *
          * @return params that can be use to confirm a SetupIntent
          */
@@ -143,12 +136,17 @@ data class ConfirmSetupIntentParams internal constructor(
         fun create(
             paymentMethodId: String,
             clientSecret: String,
-            returnUrl: String? = null
+            returnUrl: String? = null,
+            mandateId: String? = null,
+            mandateData: MandateDataParams? = null
         ): ConfirmSetupIntentParams {
-            return Builder(clientSecret)
-                .setReturnUrl(returnUrl)
-                .setPaymentMethodId(paymentMethodId)
-                .build()
+            return ConfirmSetupIntentParams(
+                clientSecret = clientSecret,
+                paymentMethodId = paymentMethodId,
+                returnUrl = returnUrl,
+                mandateId = mandateId,
+                mandateData = mandateData
+            )
         }
 
         /**
@@ -160,6 +158,8 @@ data class ConfirmSetupIntentParams internal constructor(
          * @param returnUrl The URL to redirect your customer back to after they authenticate on the payment method’s app or site.
          * If you’d prefer to redirect to a mobile application, you can alternatively supply an application URI scheme.
          * This parameter is only used for cards and other redirect-based payment methods.
+         * @param mandateId optional ID of the Mandate to be used for this payment.
+         * @param mandateData optional details about the Mandate to create.
          *
          * @return params that can be use to confirm a SetupIntent
          */
@@ -168,12 +168,17 @@ data class ConfirmSetupIntentParams internal constructor(
         fun create(
             paymentMethodCreateParams: PaymentMethodCreateParams,
             clientSecret: String,
-            returnUrl: String? = null
+            returnUrl: String? = null,
+            mandateId: String? = null,
+            mandateData: MandateDataParams? = null
         ): ConfirmSetupIntentParams {
-            return Builder(clientSecret)
-                .setPaymentMethodCreateParams(paymentMethodCreateParams)
-                .setReturnUrl(returnUrl)
-                .build()
+            return ConfirmSetupIntentParams(
+                clientSecret = clientSecret,
+                paymentMethodCreateParams = paymentMethodCreateParams,
+                returnUrl = returnUrl,
+                mandateId = mandateId,
+                mandateData = mandateData
+            )
         }
     }
 }

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
           package="com.stripe.android"
-          android:versionCode="88"
-          android:versionName="12.8.1"
+          android:versionCode="103"
+          android:versionName="14.4.1"
     >
 
     <application>
@@ -24,6 +24,10 @@
 
         <activity
             android:name=".view.PaymentRelayActivity"
+            android:theme="@style/StripeDefaultTheme" />
+
+        <activity
+            android:name=".view.Stripe3ds2CompletionActivity"
             android:theme="@style/StripeDefaultTheme" />
     </application>
 

@@ -5,6 +5,7 @@ import com.stripe.android.model.ConfirmPaymentIntentParams
 import com.stripe.android.model.ConfirmSetupIntentParams
 import com.stripe.android.model.Customer
 import com.stripe.android.model.FpxBankStatuses
+import com.stripe.android.model.ListPaymentMethodsParams
 import com.stripe.android.model.PaymentIntent
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.PaymentMethodCreateParams
@@ -13,21 +14,26 @@ import com.stripe.android.model.ShippingInformation
 import com.stripe.android.model.Source
 import com.stripe.android.model.SourceParams
 import com.stripe.android.model.Stripe3ds2AuthResult
+import com.stripe.android.model.StripeFile
+import com.stripe.android.model.StripeFileParams
 import com.stripe.android.model.StripeIntent
 import com.stripe.android.model.Token
+import com.stripe.android.model.TokenParams
 
 internal abstract class AbsFakeStripeRepository : StripeRepository {
 
     override fun confirmPaymentIntent(
         confirmPaymentIntentParams: ConfirmPaymentIntentParams,
-        options: ApiRequest.Options
+        options: ApiRequest.Options,
+        expandFields: List<String>
     ): PaymentIntent? {
         return null
     }
 
     override fun retrievePaymentIntent(
         clientSecret: String,
-        options: ApiRequest.Options
+        options: ApiRequest.Options,
+        expandFields: List<String>
     ): PaymentIntent? {
         return null
     }
@@ -42,14 +48,16 @@ internal abstract class AbsFakeStripeRepository : StripeRepository {
 
     override fun confirmSetupIntent(
         confirmSetupIntentParams: ConfirmSetupIntentParams,
-        options: ApiRequest.Options
+        options: ApiRequest.Options,
+        expandFields: List<String>
     ): SetupIntent? {
         return null
     }
 
     override fun retrieveSetupIntent(
         clientSecret: String,
-        options: ApiRequest.Options
+        options: ApiRequest.Options,
+        expandFields: List<String>
     ): SetupIntent? {
         return null
     }
@@ -65,6 +73,7 @@ internal abstract class AbsFakeStripeRepository : StripeRepository {
     override fun retrieveIntent(
         clientSecret: String,
         options: ApiRequest.Options,
+        expandFields: List<String>,
         callback: ApiResultCallback<StripeIntent>
     ) {
     }
@@ -92,6 +101,14 @@ internal abstract class AbsFakeStripeRepository : StripeRepository {
         return null
     }
 
+    override fun retrieveSource(
+        sourceId: String,
+        clientSecret: String,
+        options: ApiRequest.Options,
+        callback: ApiResultCallback<Source>
+    ) {
+    }
+
     override fun createPaymentMethod(
         paymentMethodCreateParams: PaymentMethodCreateParams,
         options: ApiRequest.Options
@@ -100,9 +117,8 @@ internal abstract class AbsFakeStripeRepository : StripeRepository {
     }
 
     override fun createToken(
-        tokenParams: Map<String, *>,
-        options: ApiRequest.Options,
-        tokenType: String
+        tokenParams: TokenParams,
+        options: ApiRequest.Options
     ): Token? {
         return null
     }
@@ -153,8 +169,7 @@ internal abstract class AbsFakeStripeRepository : StripeRepository {
 
     @Throws(APIException::class)
     override fun getPaymentMethods(
-        customerId: String,
-        paymentMethodType: String,
+        listPaymentMethodsParams: ListPaymentMethodsParams,
         publishableKey: String,
         productUsageTokens: Set<String>,
         requestOptions: ApiRequest.Options
@@ -186,6 +201,7 @@ internal abstract class AbsFakeStripeRepository : StripeRepository {
 
     override fun retrieveCustomer(
         customerId: String,
+        productUsageTokens: Set<String>,
         requestOptions: ApiRequest.Options
     ): Customer? {
         return null
@@ -210,7 +226,7 @@ internal abstract class AbsFakeStripeRepository : StripeRepository {
     }
 
     override fun getFpxBankStatus(options: ApiRequest.Options): FpxBankStatuses {
-        return FpxBankStatuses.EMPTY
+        return FpxBankStatuses()
     }
 
     override fun start3ds2Auth(
@@ -226,5 +242,12 @@ internal abstract class AbsFakeStripeRepository : StripeRepository {
         requestOptions: ApiRequest.Options,
         callback: ApiResultCallback<Boolean>
     ) {
+    }
+
+    override fun createFile(
+        fileParams: StripeFileParams,
+        requestOptions: ApiRequest.Options
+    ): StripeFile {
+        return StripeFile()
     }
 }

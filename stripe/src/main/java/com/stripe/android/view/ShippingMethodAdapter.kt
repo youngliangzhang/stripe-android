@@ -3,23 +3,41 @@ package com.stripe.android.view
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.stripe.android.model.ShippingMethod
-import java.util.ArrayList
 
 /**
  * Adapter that populates a list with shipping methods
  */
 internal class ShippingMethodAdapter :
     RecyclerView.Adapter<ShippingMethodAdapter.ShippingMethodViewHolder>() {
+    internal var onShippingMethodSelectedCallback: (ShippingMethod) -> Unit = {}
 
-    private var shippingMethods: List<ShippingMethod> = ArrayList()
-    private var selectedIndex = 0
+    internal var shippingMethods: List<ShippingMethod> = emptyList()
+        set(value) {
+            // reset selected
+            selectedIndex = 0
+            field = value
+            notifyDataSetChanged()
+        }
+
+    @JvmSynthetic
+    internal var selectedIndex = 0
+        set(value) {
+            if (field != value) {
+                // only notify change if the field's value is changing
+                notifyItemChanged(field)
+                notifyItemChanged(value)
+                field = value
+
+                onShippingMethodSelectedCallback(shippingMethods[value])
+            }
+        }
 
     init {
         setHasStableIds(true)
     }
 
     val selectedShippingMethod: ShippingMethod?
-        get() = shippingMethods[selectedIndex]
+        get() = shippingMethods.getOrNull(selectedIndex)
 
     override fun getItemCount(): Int {
         return shippingMethods.size
@@ -30,53 +48,24 @@ internal class ShippingMethodAdapter :
     }
 
     override fun onCreateViewHolder(viewGroup: ViewGroup, i: Int): ShippingMethodViewHolder {
-        return ShippingMethodViewHolder(ShippingMethodView(viewGroup.context), this)
+        return ShippingMethodViewHolder(ShippingMethodView(viewGroup.context))
     }
 
     override fun onBindViewHolder(holder: ShippingMethodViewHolder, i: Int) {
         holder.setShippingMethod(shippingMethods[i])
         holder.setSelected(i == selectedIndex)
-    }
-
-    fun setShippingMethods(
-        shippingMethods: List<ShippingMethod>?,
-        defaultShippingMethod: ShippingMethod?
-    ) {
-        this.shippingMethods = shippingMethods ?: emptyList()
-        selectedIndex = if (defaultShippingMethod == null) {
-            0
-        } else {
-            this.shippingMethods.indexOf(defaultShippingMethod)
+        holder.shippingMethodView.setOnClickListener {
+            selectedIndex = holder.adapterPosition
         }
-        notifyDataSetChanged()
-    }
-
-    fun onShippingMethodSelected(selectedIndex: Int) {
-        val previousSelectedIndex = this.selectedIndex
-        this.selectedIndex = selectedIndex
-
-        notifyItemChanged(previousSelectedIndex)
-        notifyItemChanged(selectedIndex)
     }
 
     internal fun setSelected(shippingMethod: ShippingMethod) {
-        val previouslySelectedIndex = selectedIndex
         selectedIndex = shippingMethods.indexOf(shippingMethod)
-        if (previouslySelectedIndex != selectedIndex) {
-            notifyItemChanged(previouslySelectedIndex)
-            notifyItemChanged(selectedIndex)
-        }
     }
 
     internal class ShippingMethodViewHolder constructor(
-        private val shippingMethodView: ShippingMethodView,
-        adapter: ShippingMethodAdapter
+        internal val shippingMethodView: ShippingMethodView
     ) : RecyclerView.ViewHolder(shippingMethodView) {
-        init {
-            shippingMethodView.setOnClickListener {
-                adapter.onShippingMethodSelected(adapterPosition)
-            }
-        }
 
         fun setShippingMethod(shippingMethod: ShippingMethod) {
             shippingMethodView.setShippingMethod(shippingMethod)

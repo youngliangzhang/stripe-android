@@ -7,19 +7,17 @@ import androidx.test.core.app.ApplicationProvider
 import com.nhaarman.mockitokotlin2.KArgumentCaptor
 import com.nhaarman.mockitokotlin2.argumentCaptor
 import com.nhaarman.mockitokotlin2.eq
+import com.nhaarman.mockitokotlin2.mock
 import com.nhaarman.mockitokotlin2.verify
 import com.stripe.android.model.ConfirmPaymentIntentParams
 import com.stripe.android.model.ConfirmSetupIntentParams
 import com.stripe.android.model.PaymentIntentFixtures
 import com.stripe.android.model.SetupIntentFixtures
 import com.stripe.android.view.AuthActivityStarter
-import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.junit.runner.RunWith
-import org.mockito.Mock
 import org.mockito.Mockito.`when`
-import org.mockito.MockitoAnnotations
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
@@ -29,22 +27,11 @@ class StripePaymentAuthTest {
         ApplicationProvider.getApplicationContext<Context>()
     }
 
-    @Mock
-    private lateinit var activity: Activity
-    @Mock
-    private lateinit var paymentController: PaymentController
-    @Mock
-    private lateinit var paymentCallback: ApiResultCallback<PaymentIntentResult>
-    @Mock
-    private lateinit var setupCallback: ApiResultCallback<SetupIntentResult>
-
-    private lateinit var hostArgumentCaptor: KArgumentCaptor<AuthActivityStarter.Host>
-
-    @BeforeTest
-    fun setup() {
-        MockitoAnnotations.initMocks(this)
-        hostArgumentCaptor = argumentCaptor()
-    }
+    private val activity: Activity = mock()
+    private val paymentController: PaymentController = mock()
+    private val paymentCallback: ApiResultCallback<PaymentIntentResult> = mock()
+    private val setupCallback: ApiResultCallback<SetupIntentResult> = mock()
+    private val hostArgumentCaptor: KArgumentCaptor<AuthActivityStarter.Host> = argumentCaptor()
 
     @Test
     fun confirmPayment_shouldConfirmAndAuth() {
@@ -113,11 +100,10 @@ class StripePaymentAuthTest {
             StripePaymentController.PAYMENT_REQUEST_CODE, data))
             .thenReturn(true)
         val stripe = createStripe()
-        stripe.onPaymentResult(StripePaymentController.PAYMENT_REQUEST_CODE, data, paymentCallback)
+        stripe.onPaymentResult(StripePaymentController.PAYMENT_REQUEST_CODE, data,
+            callback = paymentCallback)
 
-        verify(paymentController).handlePaymentResult(data,
-            ApiRequest.Options(ApiKeyFixtures.FAKE_PUBLISHABLE_KEY),
-            paymentCallback)
+        verify(paymentController).handlePaymentResult(data, paymentCallback)
     }
 
     @Test
@@ -127,22 +113,20 @@ class StripePaymentAuthTest {
             StripePaymentController.SETUP_REQUEST_CODE, data))
             .thenReturn(true)
         val stripe = createStripe()
-        stripe.onSetupResult(StripePaymentController.SETUP_REQUEST_CODE, data, setupCallback)
+        stripe.onSetupResult(StripePaymentController.SETUP_REQUEST_CODE, data,
+            callback = setupCallback)
 
-        verify(paymentController).handleSetupResult(data,
-            ApiRequest.Options(ApiKeyFixtures.FAKE_PUBLISHABLE_KEY),
-            setupCallback)
+        verify(paymentController).handleSetupResult(data, setupCallback)
     }
 
     private fun createStripe(): Stripe {
         return Stripe(
             StripeApiRepository(
                 context,
-                null,
-                stripeApiRequestExecutor = StripeApiRequestExecutor(),
-                fireAndForgetRequestExecutor = FakeFireAndForgetRequestExecutor()
+                ApiKeyFixtures.FAKE_PUBLISHABLE_KEY,
+                stripeApiRequestExecutor = ApiRequestExecutor.Default(),
+                analyticsRequestExecutor = FakeAnalyticsRequestExecutor()
             ),
-            StripeNetworkUtils(context),
             paymentController,
             ApiKeyFixtures.FAKE_PUBLISHABLE_KEY, null
         )

@@ -40,26 +40,27 @@ class PaymentMethodsActivityStarter : ActivityStarter<PaymentMethodsActivity, Ar
     @Parcelize
     data class Args internal constructor(
         internal val initialPaymentMethodId: String?,
-        val shouldRequirePostalCode: Boolean,
         @LayoutRes val addPaymentMethodFooterLayoutId: Int,
         internal val isPaymentSessionActive: Boolean,
         internal val paymentMethodTypes: List<PaymentMethod.Type>,
         internal val paymentConfiguration: PaymentConfiguration?,
         internal val windowFlags: Int? = null,
         internal val billingAddressFields: BillingAddressFields,
-        internal val shouldShowGooglePay: Boolean = false
+        internal val shouldShowGooglePay: Boolean = false,
+        internal val useGooglePay: Boolean = false
     ) : ActivityStarter.Args {
         class Builder : ObjectBuilder<Args> {
-            private var billingAddressFields: BillingAddressFields = BillingAddressFields.None
+            private var billingAddressFields: BillingAddressFields = BillingAddressFields.PostalCode
             private var initialPaymentMethodId: String? = null
-            private var shouldRequirePostalCode = false
             private var isPaymentSessionActive = false
             private var paymentMethodTypes: List<PaymentMethod.Type>? = null
             private var shouldShowGooglePay: Boolean = false
+            private var useGooglePay: Boolean = false
             private var paymentConfiguration: PaymentConfiguration? = null
+            private var windowFlags: Int? = null
+
             @LayoutRes
             private var addPaymentMethodFooterLayoutId: Int = 0
-            private var windowFlags: Int? = null
 
             /**
              * @param billingAddressFields the billing address fields to require on [AddPaymentMethodActivity]
@@ -72,12 +73,6 @@ class PaymentMethodsActivityStarter : ActivityStarter<PaymentMethodsActivity, Ar
 
             fun setInitialPaymentMethodId(initialPaymentMethodId: String?): Builder = apply {
                 this.initialPaymentMethodId = initialPaymentMethodId
-            }
-
-            @Deprecated("Use setBillingAddressFields()",
-                ReplaceWith("setBillingAddressFields(BillingAddressFields.PostalCode"))
-            fun setShouldRequirePostalCode(shouldRequirePostalCode: Boolean): Builder = apply {
-                this.shouldRequirePostalCode = shouldRequirePostalCode
             }
 
             fun setIsPaymentSessionActive(isPaymentSessionActive: Boolean): Builder = apply {
@@ -112,8 +107,7 @@ class PaymentMethodsActivityStarter : ActivityStarter<PaymentMethodsActivity, Ar
              * Payment Methods selection screen. If a user selects the Google Pay option,
              * [PaymentMethodsActivityStarter.Result.useGooglePay] will be `true`.
              */
-            @JvmSynthetic
-            internal fun setShouldShowGooglePay(shouldShowGooglePay: Boolean): Builder = apply {
+            fun setShouldShowGooglePay(shouldShowGooglePay: Boolean): Builder = apply {
                 this.shouldShowGooglePay = shouldShowGooglePay
             }
 
@@ -136,13 +130,17 @@ class PaymentMethodsActivityStarter : ActivityStarter<PaymentMethodsActivity, Ar
                 this.windowFlags = windowFlags
             }
 
+            internal fun setUseGooglePay(useGooglePay: Boolean): Builder = apply {
+                this.useGooglePay = useGooglePay
+            }
+
             override fun build(): Args {
                 return Args(
                     initialPaymentMethodId = initialPaymentMethodId,
-                    shouldRequirePostalCode = shouldRequirePostalCode,
                     isPaymentSessionActive = isPaymentSessionActive,
                     paymentMethodTypes = paymentMethodTypes ?: listOf(PaymentMethod.Type.Card),
                     shouldShowGooglePay = shouldShowGooglePay,
+                    useGooglePay = useGooglePay,
                     paymentConfiguration = paymentConfiguration,
                     addPaymentMethodFooterLayoutId = addPaymentMethodFooterLayoutId,
                     windowFlags = windowFlags,
@@ -168,13 +166,13 @@ class PaymentMethodsActivityStarter : ActivityStarter<PaymentMethodsActivity, Ar
      */
     @Parcelize
     data class Result internal constructor(
-        @JvmField val paymentMethod: PaymentMethod,
-        private val useGooglePay: Boolean = false
+        @JvmField val paymentMethod: PaymentMethod? = null,
+        val useGooglePay: Boolean = false
     ) : ActivityStarter.Result {
         override fun toBundle(): Bundle {
-            val bundle = Bundle()
-            bundle.putParcelable(ActivityStarter.Result.EXTRA, this)
-            return bundle
+            return Bundle().also {
+                it.putParcelable(ActivityStarter.Result.EXTRA, this)
+            }
         }
 
         companion object {

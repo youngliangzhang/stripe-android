@@ -1,9 +1,10 @@
 package com.stripe.android.view
 
 import android.content.Context
+import android.os.Build
 import android.text.Editable
 import android.util.AttributeSet
-import android.view.accessibility.AccessibilityNodeInfo
+import android.view.View
 import android.widget.EditText
 import androidx.annotation.VisibleForTesting
 import com.stripe.android.R
@@ -17,8 +18,14 @@ class ExpiryDateEditText @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = androidx.appcompat.R.attr.editTextStyle
 ) : StripeEditText(context, attrs, defStyleAttr) {
+
     init {
+        setErrorMessage(resources.getString(R.string.invalid_expiry_year))
         listenForTextChanges()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            setAutofillHints(View.AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DATE)
+        }
     }
 
     // invoked when a valid date has been entered
@@ -59,14 +66,10 @@ class ExpiryDateEditText @JvmOverloads constructor(
             }
         }
 
-    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
-        super.onInitializeAccessibilityNodeInfo(info)
-        val accLabel = resources.getString(
-            R.string.acc_label_expiry_date_node,
-            text
-        )
-        info.text = accLabel
-    }
+    override val accessibilityText: String?
+        get() {
+            return resources.getString(R.string.acc_label_expiry_date_node, text)
+        }
 
     private fun listenForTextChanges() {
         addTextChangedListener(object : StripeTextWatcher() {
@@ -158,10 +161,10 @@ class ExpiryDateEditText @JvmOverloads constructor(
                 }
 
                 ignoreChanges = true
-                if (formattedDate != null) {
+                if (!isLastKeyDelete && formattedDate != null) {
                     setText(formattedDate)
                     newCursorPosition?.let {
-                        setSelection(it)
+                        setSelection(it.coerceIn(0, fieldText.length))
                     }
                 }
 

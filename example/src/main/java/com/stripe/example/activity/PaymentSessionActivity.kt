@@ -6,7 +6,6 @@ import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.google.android.material.snackbar.Snackbar
 import com.stripe.android.CustomerSession
 import com.stripe.android.PaymentSession
 import com.stripe.android.PaymentSessionConfig
@@ -19,10 +18,8 @@ import com.stripe.android.model.ShippingInformation
 import com.stripe.android.model.ShippingMethod
 import com.stripe.android.view.BillingAddressFields
 import com.stripe.android.view.PaymentUtils
-import com.stripe.android.view.ShippingInfoWidget
 import com.stripe.example.R
-import com.stripe.example.service.ExampleEphemeralKeyProvider
-import kotlinx.android.synthetic.main.activity_payment_session.*
+import com.stripe.example.databinding.PaymentSessionActivityBinding
 import java.util.Currency
 import java.util.Locale
 
@@ -31,82 +28,87 @@ import java.util.Locale
  * information needed to request payment for the current customer.
  */
 class PaymentSessionActivity : AppCompatActivity() {
+    private val viewBinding: PaymentSessionActivityBinding by lazy {
+        PaymentSessionActivityBinding.inflate(layoutInflater)
+    }
 
     private lateinit var paymentSession: PaymentSession
     private val notSelectedText: String by lazy {
         getString(R.string.not_selected)
+    }
+    private val snackbarController: SnackbarController by lazy {
+        SnackbarController(viewBinding.coordinator)
     }
 
     private var paymentSessionData: PaymentSessionData? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_payment_session)
+        setContentView(viewBinding.root)
 
-        progress_bar.visibility = View.VISIBLE
+        paymentSession = createPaymentSession(savedInstanceState == null)
 
-        paymentSession = createPaymentSession(savedInstanceState)
-
-        btn_select_payment_method.setOnClickListener {
+        viewBinding.selectPaymentMethodButton.setOnClickListener {
             paymentSession.presentPaymentMethodSelection()
         }
-        btn_start_payment_flow.setOnClickListener {
+        viewBinding.startPaymentFlowButton.setOnClickListener {
             paymentSession.presentShippingFlow()
         }
     }
 
-    private fun createCustomerSession(): CustomerSession {
-        CustomerSession.initCustomerSession(
-            this,
-            ExampleEphemeralKeyProvider(this),
-            false
-        )
-        return CustomerSession.getInstance()
-    }
-
     private fun createPaymentSession(
-        savedInstanceState: Bundle?,
-        shouldPrefetchCustomer: Boolean = true
+        shouldPrefetchCustomer: Boolean = false
     ): PaymentSession {
-        // CustomerSession only needs to be initialized once per app.
-        val customerSession = createCustomerSession()
+        if (shouldPrefetchCustomer) {
+            disableUi()
+        } else {
+            enableUi()
+        }
 
-        val paymentSession = PaymentSession(this)
-        val paymentSessionInitialized = paymentSession.init(
-            listener = PaymentSessionListenerImpl(this, customerSession),
-            paymentSessionConfig = PaymentSessionConfig.Builder()
+        // CustomerSession only needs to be initialized once per app.
+        val customerSession = CustomerSession.getInstance()
+
+        val paymentSession = PaymentSession(
+            activity = this,
+            config = PaymentSessionConfig.Builder()
                 .setAddPaymentMethodFooter(R.layout.add_payment_method_footer)
                 .setPrepopulatedShippingInfo(EXAMPLE_SHIPPING_INFO)
-                .setHiddenShippingInfoFields(
-                    ShippingInfoWidget.CustomizableShippingField.PHONE_FIELD,
-                    ShippingInfoWidget.CustomizableShippingField.CITY_FIELD
-                )
-
+                .setHiddenShippingInfoFields()
                 // Optionally specify the `PaymentMethod.Type` values to use.
                 // Defaults to `PaymentMethod.Type.Card`
                 .setPaymentMethodTypes(listOf(PaymentMethod.Type.Card))
+                .setShouldShowGooglePay(true)
                 .setAllowedShippingCountryCodes(setOf("US", "CA"))
                 .setShippingInformationValidator(ShippingInformationValidator())
                 .setShippingMethodsFactory(ShippingMethodsFactory())
                 .setWindowFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                .setBillingAddressFields(BillingAddressFields.Full)
-                .build(),
-            savedInstanceState = savedInstanceState,
-            shouldPrefetchCustomer = shouldPrefetchCustomer
+                .setBillingAddressFields(BillingAddressFields.PostalCode)
+                .setShouldPrefetchCustomer(shouldPrefetchCustomer)
+                .build()
         )
-        if (paymentSessionInitialized) {
-            paymentSession.setCartTotal(2000L)
-        }
+        paymentSession.init(
+            listener = PaymentSessionListenerImpl(this, customerSession)
+        )
+        paymentSession.setCartTotal(2000L)
 
         return paymentSession
     }
 
     private fun createPaymentMethodDescription(data: PaymentSessionData): String {
-        return data.paymentMethod?.let { paymentMethod ->
-            paymentMethod.card?.let { card ->
-                "${card.brand} ending in ${card.last4}"
-            } ?: paymentMethod.type
-        } ?: notSelectedText
+        val paymentMethod = data.paymentMethod
+        return when {
+            paymentMethod != null -> {
+                paymentMethod.card?.let { card ->
+                    "${card.brand} ending in ${card.last4}"
+                } ?: paymentMethod.type?.code.orEmpty()
+            }
+            data.useGooglePay -> {
+                "Use Google Pay"
+            }
+            else -> {
+                notSelectedText
+            }
+        }
     }
 
     private fun createShippingInfoDescription(shippingInformation: ShippingInformation?): String {
@@ -147,38 +149,34 @@ class PaymentSessionActivity : AppCompatActivity() {
         paymentSession.handlePaymentData(requestCode, resultCode, data ?: Intent())
     }
 
-    override fun onDestroy() {
-        paymentSession.onDestroy()
-        super.onDestroy()
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        paymentSession.savePaymentSessionInstanceState(outState)
-    }
-
     private fun onPaymentSessionDataChanged(
         customerSession: CustomerSession,
         data: PaymentSessionData
     ) {
         paymentSessionData = data
-        progress_bar.visibility = View.VISIBLE
+        disableUi()
         customerSession.retrieveCurrentCustomer(
             PaymentSessionChangeCustomerRetrievalListener(this)
         )
     }
 
     private fun enableUi() {
-        progress_bar.visibility = View.INVISIBLE
-        btn_select_payment_method.isEnabled = true
-        btn_start_payment_flow.isEnabled = true
+        viewBinding.progressBar.visibility = View.INVISIBLE
+        viewBinding.selectPaymentMethodButton.isEnabled = true
+        viewBinding.startPaymentFlowButton.isEnabled = true
+    }
+
+    private fun disableUi() {
+        viewBinding.progressBar.visibility = View.VISIBLE
+        viewBinding.selectPaymentMethodButton.isEnabled = false
+        viewBinding.startPaymentFlowButton.isEnabled = false
     }
 
     private fun onCustomerRetrieved() {
         enableUi()
 
         paymentSessionData?.let { paymentSessionData ->
-            tv_ready_to_charge.setCompoundDrawablesRelativeWithIntrinsicBounds(
+            viewBinding.readyToCharge.setCompoundDrawablesRelativeWithIntrinsicBounds(
                 if (paymentSessionData.isPaymentReadyToCharge) {
                     ContextCompat.getDrawable(this, R.drawable.ic_check)
                 } else {
@@ -187,12 +185,13 @@ class PaymentSessionActivity : AppCompatActivity() {
                 null, null, null
             )
 
-            tv_payment_method.text = createPaymentMethodDescription(paymentSessionData)
+            viewBinding.paymentMethod.text =
+                createPaymentMethodDescription(paymentSessionData)
 
-            tv_shipping_info.text =
+            viewBinding.shippingInfo.text =
                 createShippingInfoDescription(paymentSessionData.shippingInformation)
 
-            tv_shipping_method.text =
+            viewBinding.shippingMethod.text =
                 createShippingMethodDescription(paymentSessionData.shippingMethod)
         }
     }
@@ -214,8 +213,7 @@ class PaymentSessionActivity : AppCompatActivity() {
     }
 
     private fun showError(errorMessage: String) {
-        Snackbar.make(coordinator, errorMessage, Snackbar.LENGTH_LONG)
-            .show()
+        snackbarController.show(errorMessage)
     }
 
     private class PaymentSessionListenerImpl internal constructor(
@@ -228,10 +226,10 @@ class PaymentSessionActivity : AppCompatActivity() {
                 BackgroundTaskTracker.onStart()
             }
 
-            listenerActivity?.progress_bar?.visibility = if (isCommunicating) {
-                View.VISIBLE
+            if (isCommunicating) {
+                listenerActivity?.disableUi()
             } else {
-                View.INVISIBLE
+                listenerActivity?.enableUi()
             }
         }
 
@@ -244,6 +242,10 @@ class PaymentSessionActivity : AppCompatActivity() {
             BackgroundTaskTracker.onStop()
             listenerActivity?.onPaymentSessionDataChanged(customerSession, data)
         }
+    }
+
+    private fun onError() {
+        viewBinding.progressBar.visibility = View.INVISIBLE
     }
 
     private class PaymentSessionChangeCustomerRetrievalListener internal constructor(
@@ -261,7 +263,7 @@ class PaymentSessionActivity : AppCompatActivity() {
 
         override fun onError(errorCode: Int, errorMessage: String, stripeError: StripeError?) {
             BackgroundTaskTracker.onStop()
-            activity?.progress_bar?.visibility = View.INVISIBLE
+            activity?.onError()
         }
     }
 
@@ -275,15 +277,15 @@ class PaymentSessionActivity : AppCompatActivity() {
                 .setPostalCode("94107")
                 .setState("CA")
                 .build(),
-            "Fake Name",
+            "Jenny Rosen",
             "(555) 555-5555"
         )
 
         private val SHIPPING_METHODS = listOf(
             ShippingMethod("UPS Ground", "ups-ground",
-                0, "USD", "Arrives in 3-5 days"),
-            ShippingMethod("FedEx", "fedex",
-                599, "USD", "Arrives tomorrow")
+                599, "USD", "Arrives in 3-5 days"),
+            ShippingMethod("FedEx Overnight", "fedex",
+                1499, "USD", "Arrives tomorrow")
         )
     }
 }

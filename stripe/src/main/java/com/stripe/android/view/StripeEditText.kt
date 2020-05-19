@@ -2,16 +2,17 @@ package com.stripe.android.view
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.os.Build
 import android.os.Handler
 import android.text.Editable
 import android.util.AttributeSet
 import android.view.KeyEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputConnectionWrapper
 import androidx.annotation.ColorInt
 import androidx.annotation.StringRes
-import androidx.appcompat.widget.AppCompatEditText
 import androidx.core.content.ContextCompat
 import com.google.android.material.textfield.TextInputEditText
 import com.stripe.android.R
@@ -27,7 +28,9 @@ open class StripeEditText @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = androidx.appcompat.R.attr.editTextStyle
-) : AppCompatEditText(context, attrs, defStyleAttr) {
+) : TextInputEditText(context, attrs, defStyleAttr) {
+
+    protected var isLastKeyDelete: Boolean = false
 
     private var afterTextChangedListener: AfterTextChangedListener? = null
     private var deleteEmptyListener: DeleteEmptyListener? = null
@@ -41,22 +44,27 @@ open class StripeEditText @JvmOverloads constructor(
      * the text in an error color determined by the original text color.
      */
     var shouldShowError: Boolean = false
-        set(shouldShowError) = if (errorMessage != null) {
-            val errorMessage = errorMessage.takeIf { shouldShowError }
-            errorMessageListener?.displayErrorMessage(errorMessage)
-            field = shouldShowError
-        } else {
-            field = shouldShowError
-            if (this.shouldShowError) {
-                setTextColor(errorColor ?: defaultErrorColor)
-            } else {
-                setTextColor(cachedColorStateList)
+        set(shouldShowError) {
+            errorMessage?.let {
+                errorMessageListener?.displayErrorMessage(it.takeIf { shouldShowError })
             }
 
-            refreshDrawableState()
+            if (field != shouldShowError) {
+                // only update the view's UI if the property's value is changing
+                if (shouldShowError) {
+                    setTextColor(errorColor ?: defaultErrorColor)
+                } else {
+                    setTextColor(cachedColorStateList)
+                }
+                refreshDrawableState()
+            }
+
+            field = shouldShowError
         }
 
-    protected val fieldText: String
+    internal var errorMessage: String? = null
+
+    internal val fieldText: String
         get() {
             return text?.toString().orEmpty()
         }
@@ -67,7 +75,6 @@ open class StripeEditText @JvmOverloads constructor(
     private var errorColor: Int? = null
 
     private val hintHandler: Handler = Handler()
-    private var errorMessage: String? = null
     private var errorMessageListener: ErrorMessageListener? = null
 
     /**
@@ -83,8 +90,14 @@ open class StripeEditText @JvmOverloads constructor(
         }
 
     init {
-        initView()
+        maxLines = 1
+        listenForTextChanges()
+        listenForDeleteEmpty()
+        determineDefaultErrorColor()
+        cachedColorStateList = textColors
     }
+
+    protected open val accessibilityText: String? = null
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
         val inputConnection = super.onCreateInputConnection(outAttrs)
@@ -162,17 +175,19 @@ open class StripeEditText @JvmOverloads constructor(
         }
     }
 
+    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        info.isContentInvalid = shouldShowError
+        accessibilityText?.let { info.text = it }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            info.error = errorMessage.takeIf { shouldShowError }
+        }
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         // Passing a null token removes all callbacks and messages to the handler.
         hintHandler.removeCallbacksAndMessages(null)
-    }
-
-    private fun initView() {
-        listenForTextChanges()
-        listenForDeleteEmpty()
-        determineDefaultErrorColor()
-        cachedColorStateList = textColors
     }
 
     private fun determineDefaultErrorColor() {
@@ -200,17 +215,16 @@ open class StripeEditText @JvmOverloads constructor(
     private fun listenForDeleteEmpty() {
         // This method works for hard keyboards and older phones.
         setOnKeyListener { _, keyCode, event ->
-            if (isEmptyDelete(keyCode, event)) {
+            isLastKeyDelete = isDeleteKey(keyCode, event)
+            if (isLastKeyDelete && length() == 0) {
                 deleteEmptyListener?.onDeleteEmpty()
             }
             false
         }
     }
 
-    private fun isEmptyDelete(keyCode: Int, event: KeyEvent): Boolean {
-        return keyCode == KeyEvent.KEYCODE_DEL &&
-            event.action == KeyEvent.ACTION_DOWN &&
-            length() == 0
+    private fun isDeleteKey(keyCode: Int, event: KeyEvent): Boolean {
+        return keyCode == KeyEvent.KEYCODE_DEL && event.action == KeyEvent.ACTION_DOWN
     }
 
     interface DeleteEmptyListener {

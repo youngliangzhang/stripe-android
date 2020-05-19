@@ -3,29 +3,27 @@ package com.stripe.android.view
 import com.nhaarman.mockitokotlin2.KArgumentCaptor
 import com.nhaarman.mockitokotlin2.argumentCaptor
 import com.nhaarman.mockitokotlin2.eq
+import com.nhaarman.mockitokotlin2.mock
 import com.nhaarman.mockitokotlin2.verify
 import com.stripe.android.CustomerSession
 import com.stripe.android.PaymentSessionConfig
 import com.stripe.android.PaymentSessionData
+import com.stripe.android.PaymentSessionFixtures
 import com.stripe.android.model.CustomerFixtures
 import com.stripe.android.model.ShippingInformation
 import com.stripe.android.model.ShippingMethod
-import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.MainScope
 import org.junit.runner.RunWith
-import org.mockito.Mock
-import org.mockito.MockitoAnnotations
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class PaymentFlowViewModelTest {
-
-    @Mock
-    private lateinit var customerSession: CustomerSession
+    private val customerSession: CustomerSession = mock()
 
     private val customerRetrievalListener: KArgumentCaptor<CustomerSession.CustomerRetrievalListener> by lazy {
         argumentCaptor<CustomerSession.CustomerRetrievalListener>()
@@ -34,29 +32,30 @@ class PaymentFlowViewModelTest {
     private val viewModel: PaymentFlowViewModel by lazy {
         PaymentFlowViewModel(
             customerSession = customerSession,
-            paymentSessionData = PaymentSessionData(),
+            paymentSessionData = PaymentSessionData(PaymentSessionFixtures.CONFIG),
             workScope = MainScope()
         )
     }
 
-    @BeforeTest
-    fun setup() {
-        MockitoAnnotations.initMocks(this)
-    }
-
     @Test
     fun saveCustomerShippingInformation_onSuccess_returnsExpectedData() {
+        assertFalse(viewModel.isShippingInfoSubmitted)
+
         val result =
             viewModel.saveCustomerShippingInformation(ShippingInfoFixtures.DEFAULT)
         verify(customerSession).setCustomerShippingInformation(
             eq(ShippingInfoFixtures.DEFAULT),
+            eq(PaymentFlowViewModel.PRODUCT_USAGE),
             customerRetrievalListener.capture()
         )
 
         customerRetrievalListener.firstValue.onCustomerRetrieved(CustomerFixtures.CUSTOMER)
 
-        val resultValue = requireNotNull(result.value) as PaymentFlowViewModel.SaveCustomerShippingInfoResult.Success
+        val resultValue =
+            requireNotNull(result.value) as PaymentFlowViewModel.SaveCustomerShippingInfoResult.Success
         assertNotNull(resultValue.customer)
+
+        assertTrue(viewModel.isShippingInfoSubmitted)
     }
 
     @Test
@@ -70,6 +69,7 @@ class PaymentFlowViewModelTest {
         val resultValue =
             requireNotNull(result.value) as PaymentFlowViewModel.ValidateShippingInfoResult.Success
         assertEquals(SHIPPING_METHODS, resultValue.shippingMethods)
+        assertEquals(SHIPPING_METHODS, viewModel.shippingMethods)
     }
 
     @Test
@@ -83,6 +83,7 @@ class PaymentFlowViewModelTest {
         val resultValue =
             requireNotNull(result.value) as PaymentFlowViewModel.ValidateShippingInfoResult.Success
         assertTrue(resultValue.shippingMethods.isEmpty())
+        assertTrue(viewModel.shippingMethods.isEmpty())
     }
 
     @Test

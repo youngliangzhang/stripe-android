@@ -1,9 +1,8 @@
 package com.stripe.android
 
-import com.stripe.android.model.PaymentMethodTest
+import com.stripe.android.model.PaymentMethodFixtures
 import com.stripe.android.model.ShippingInformation
 import com.stripe.android.model.ShippingMethod
-import com.stripe.android.model.parsers.PaymentMethodJsonParser
 import com.stripe.android.utils.ParcelUtils
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,28 +30,28 @@ class PaymentSessionDataTest {
 
     @Test
     fun updateIsPaymentReadyToCharge_shippingRequired() {
-        val config = PaymentSessionConfig.Builder()
-            .setShippingInfoRequired(true)
-            .setShippingMethodsRequired(true)
-            .build()
+        val config = PaymentSessionFixtures.CONFIG
 
         assertFalse(PaymentSessionData(config).isPaymentReadyToCharge)
 
         assertFalse(PaymentSessionData(
-            config,
+            isShippingInfoRequired = config.isShippingInfoRequired,
+            isShippingMethodRequired = config.isShippingMethodRequired,
             paymentMethod = PAYMENT_METHOD
         ).isPaymentReadyToCharge)
 
         assertFalse(PaymentSessionData(
-            config,
+            isShippingInfoRequired = config.isShippingInfoRequired,
+            isShippingMethodRequired = config.isShippingMethodRequired,
             paymentMethod = PAYMENT_METHOD,
-            shippingInformation = ShippingInformation(null, null, null)
+            shippingInformation = ShippingInformation()
         ).isPaymentReadyToCharge)
 
         assertTrue(PaymentSessionData(
-            config,
+            isShippingInfoRequired = config.isShippingInfoRequired,
+            isShippingMethodRequired = config.isShippingMethodRequired,
             paymentMethod = PAYMENT_METHOD,
-            shippingInformation = ShippingInformation(null, null, null),
+            shippingInformation = ShippingInformation(),
             shippingMethod = ShippingMethod("label", "id", 0, "USD")
         ).isPaymentReadyToCharge)
     }
@@ -60,6 +59,8 @@ class PaymentSessionDataTest {
     @Test
     fun writeToParcel_withNulls_readsFromParcelCorrectly() {
         val data = PaymentSessionData(
+            isShippingInfoRequired = true,
+            isShippingMethodRequired = true,
             cartTotal = 100L,
             shippingTotal = 150L
         )
@@ -70,10 +71,12 @@ class PaymentSessionDataTest {
     @Test
     fun writeToParcel_withoutNulls_readsFromParcelCorrectly() {
         val data = PaymentSessionData(
+            isShippingInfoRequired = true,
+            isShippingMethodRequired = true,
             cartTotal = 100L,
             shippingTotal = 150L,
             paymentMethod = PAYMENT_METHOD,
-            shippingInformation = ShippingInformation(null, null, null),
+            shippingInformation = ShippingInformation(),
             shippingMethod = ShippingMethod("UPS", "SuperFast", 10000L, "USD")
         )
 
@@ -81,6 +84,6 @@ class PaymentSessionDataTest {
     }
 
     private companion object {
-        private val PAYMENT_METHOD = PaymentMethodJsonParser().parse(PaymentMethodTest.PM_CARD_JSON)
+        private val PAYMENT_METHOD = PaymentMethodFixtures.CARD_PAYMENT_METHOD
     }
 }

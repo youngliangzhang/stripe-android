@@ -3,7 +3,9 @@ package com.stripe.example
 import android.os.StrictMode
 import androidx.multidex.MultiDexApplication
 import com.facebook.stetho.Stetho
+import com.stripe.android.CustomerSession
 import com.stripe.android.PaymentConfiguration
+import com.stripe.example.service.ExampleEphemeralKeyProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,5 +36,11 @@ class ExampleApplication : MultiDexApplication() {
         CoroutineScope(Dispatchers.IO).launch {
             Stetho.initializeWithDefaults(this@ExampleApplication)
         }
+
+        CustomerSession.initCustomerSession(
+            this,
+            ExampleEphemeralKeyProvider(this),
+            false
+        )
     }
 }

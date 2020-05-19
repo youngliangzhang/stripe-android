@@ -5,40 +5,38 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.snackbar.Snackbar
 import com.stripe.android.CustomerSession
 import com.stripe.android.StripeError
 import com.stripe.android.model.Customer
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.view.PaymentMethodsActivityStarter
 import com.stripe.example.R
-import com.stripe.example.service.ExampleEphemeralKeyProvider
-import kotlinx.android.synthetic.main.activity_customer_session.*
+import com.stripe.example.databinding.CustomerSessionActivityBinding
 
 /**
  * An example activity that handles working with a [CustomerSession], allowing you to
  * add and select sources for the current customer.
  */
 class CustomerSessionActivity : AppCompatActivity() {
+    private val viewBinding: CustomerSessionActivityBinding by lazy {
+        CustomerSessionActivityBinding.inflate(layoutInflater)
+    }
+
+    private val snackbarController: SnackbarController by lazy {
+        SnackbarController(viewBinding.coordinator)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_customer_session)
+        setContentView(viewBinding.root)
         setTitle(R.string.customer_payment_data_example)
-        CustomerSession.initCustomerSession(
-            this,
-            ExampleEphemeralKeyProvider(this),
-            false
-        )
 
-        progress_bar.visibility = View.VISIBLE
+        viewBinding.progressBar.visibility = View.VISIBLE
         CustomerSession.getInstance().retrieveCurrentCustomer(
             CustomerRetrievalListenerImpl(this))
 
-        btn_launch_payment_methods.isEnabled = false
-        btn_launch_payment_methods.setOnClickListener { launchWithCustomer() }
-
-        onRetrieveError("Error!!")
+        viewBinding.selectPaymentMethodButton.isEnabled = false
+        viewBinding.selectPaymentMethodButton.setOnClickListener { launchWithCustomer() }
     }
 
     private fun launchWithCustomer() {
@@ -52,7 +50,7 @@ class CustomerSessionActivity : AppCompatActivity() {
             val paymentMethod =
                 PaymentMethodsActivityStarter.Result.fromIntent(data)?.paymentMethod
             paymentMethod?.card?.let { card ->
-                tv_selected_payment_method.text = buildCardString(card)
+                viewBinding.paymentMethod.text = buildCardString(card)
             }
         }
     }
@@ -62,15 +60,14 @@ class CustomerSessionActivity : AppCompatActivity() {
     }
 
     private fun onCustomerRetrieved() {
-        btn_launch_payment_methods.isEnabled = true
-        progress_bar.visibility = View.INVISIBLE
+        viewBinding.selectPaymentMethodButton.isEnabled = true
+        viewBinding.progressBar.visibility = View.INVISIBLE
     }
 
     private fun onRetrieveError(errorMessage: String) {
-        btn_launch_payment_methods.isEnabled = false
-        progress_bar.visibility = View.INVISIBLE
-        Snackbar.make(coordinator, errorMessage, Snackbar.LENGTH_LONG)
-            .show()
+        viewBinding.selectPaymentMethodButton.isEnabled = false
+        viewBinding.progressBar.visibility = View.INVISIBLE
+        snackbarController.show(errorMessage)
     }
 
     private class CustomerRetrievalListenerImpl constructor(

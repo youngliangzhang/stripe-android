@@ -29,4 +29,30 @@
     <style name="StripeDefault3DS2Theme" parent="BaseStripe3DS2Theme" />
 
     <style name="AlertDialogStyle" parent="Theme.AppCompat.DayNight.Dialog" />
+
+    <style name="Stripe.Base.CardInputWidget.EditText" parent="Widget.AppCompat.EditText">
+        <item name="android:textSize">@dimen/ciw_stripe_edit_text_size</item>
+    </style>
+
+    <style name="Stripe.CardInputWidget.EditText" parent="Stripe.Base.CardInputWidget.EditText" />
+
+    <style name="Stripe.Base.CardInputWidget.TextInputLayout"
+        parent="Widget.Design.TextInputLayout">
+    </style>
+
+    <style name="Stripe.CardInputWidget.TextInputLayout"
+        parent="Stripe.Base.CardInputWidget.TextInputLayout" />
+
+    <style name="Stripe.Base.BecsDebitWidget.EditText" parent="Widget.AppCompat.EditText">
+        <item name="android:textSize">@dimen/stripe_becs_debit_widget_edit_text_size</item>
+    </style>
+
+    <style name="Stripe.BecsDebitWidget.EditText" parent="Stripe.Base.BecsDebitWidget.EditText" />
+
+    <style name="Stripe.Base.BecsDebitWidget.MandateAcceptanceTextView" parent="Widget.AppCompat.TextView">
+        <item name="android:paddingTop">@dimen/stripe_becs_debit_widget_mandate_acceptance_padding_top</item>
+    </style>
+
+    <style name="Stripe.BecsDebitWidget.MandateAcceptanceTextView"
+        parent="Stripe.Base.BecsDebitWidget.MandateAcceptanceTextView" />
 </resources>

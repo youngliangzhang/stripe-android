@@ -55,7 +55,7 @@ data class Token internal constructor(
 ) : StripeModel, StripePaymentSource {
     @Retention(AnnotationRetention.SOURCE)
     @StringDef(TokenType.CARD, TokenType.BANK_ACCOUNT, TokenType.PII, TokenType.ACCOUNT,
-        TokenType.CVC_UPDATE)
+        TokenType.CVC_UPDATE, TokenType.PERSON)
     annotation class TokenType {
         companion object {
             const val CARD: String = "card"
@@ -63,64 +63,9 @@ data class Token internal constructor(
             const val PII: String = "pii"
             const val ACCOUNT: String = "account"
             const val CVC_UPDATE: String = "cvc_update"
+            const val PERSON: String = "person"
         }
     }
-
-    /**
-     * Constructor that should not be invoked in your code.  This is used by Stripe to
-     * create tokens using a Stripe API response.
-     */
-    constructor(
-        id: String,
-        livemode: Boolean,
-        created: Date,
-        used: Boolean?,
-        card: Card?
-    ) : this(
-        id = id,
-        type = TokenType.CARD,
-        created = created,
-        livemode = livemode,
-        card = card,
-        used = java.lang.Boolean.TRUE == used
-    )
-
-    /**
-     * Constructor that should not be invoked in your code.  This is used by Stripe to
-     * create tokens using a Stripe API response.
-     */
-    constructor(
-        id: String,
-        livemode: Boolean,
-        created: Date,
-        used: Boolean?,
-        bankAccount: BankAccount
-    ) : this(
-        id = id,
-        type = TokenType.BANK_ACCOUNT,
-        created = created,
-        livemode = livemode,
-        used = java.lang.Boolean.TRUE == used,
-        bankAccount = bankAccount
-    )
-
-    /**
-     * Constructor that should not be invoked in your code.  This is used by Stripe to
-     * create tokens using a Stripe API response.
-     */
-    constructor(
-        id: String,
-        type: String,
-        livemode: Boolean,
-        created: Date,
-        used: Boolean?
-    ) : this(
-        id = id,
-        type = type,
-        created = created,
-        used = java.lang.Boolean.TRUE == used,
-        livemode = livemode
-    )
 
     companion object {
         @JvmStatic

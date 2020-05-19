@@ -3,13 +3,13 @@ package com.stripe.android
 import android.os.Parcelable
 import androidx.annotation.LayoutRes
 import androidx.annotation.WorkerThread
+import com.stripe.android.model.Customer
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.ShippingInformation
 import com.stripe.android.model.ShippingMethod
 import com.stripe.android.view.AddPaymentMethodActivity
 import com.stripe.android.view.BillingAddressFields
 import com.stripe.android.view.PaymentFlowActivity
-import com.stripe.android.view.PaymentFlowExtras
 import com.stripe.android.view.SelectShippingMethodWidget
 import com.stripe.android.view.ShippingInfoWidget
 import com.stripe.android.view.ShippingInfoWidget.CustomizableShippingField
@@ -31,10 +31,12 @@ data class PaymentSessionConfig internal constructor(
     @get:LayoutRes
     val addPaymentMethodFooterLayoutId: Int = 0,
     val paymentMethodTypes: List<PaymentMethod.Type> = listOf(PaymentMethod.Type.Card),
+    val shouldShowGooglePay: Boolean = false,
     val allowedShippingCountryCodes: Set<String> = emptySet(),
-    val billingAddressFields: BillingAddressFields = BillingAddressFields.None,
+    val billingAddressFields: BillingAddressFields = DEFAULT_BILLING_ADDRESS_FIELDS,
 
-    internal val shippingInformationValidator: ShippingInformationValidator? = null,
+    internal val shouldPrefetchCustomer: Boolean = true,
+    internal val shippingInformationValidator: ShippingInformationValidator = DefaultShippingInfoValidator(),
     internal val shippingMethodsFactory: ShippingMethodsFactory? = null,
     internal val windowFlags: Int? = null
 ) : Parcelable {
@@ -48,11 +50,10 @@ data class PaymentSessionConfig internal constructor(
             }
         }
 
-        if (shippingInformationValidator != null && isShippingMethodRequired) {
+        if (isShippingMethodRequired) {
             requireNotNull(shippingMethodsFactory) {
                 """
-                If isShippingMethodRequired is true and a ShippingInformationValidator is provided,
-                a ShippingMethodsFactory must also be provided.
+                If isShippingMethodRequired is true a ShippingMethodsFactory must also be provided.
                 """.trimIndent()
             }
         }
@@ -86,17 +87,19 @@ data class PaymentSessionConfig internal constructor(
     }
 
     class Builder : ObjectBuilder<PaymentSessionConfig> {
-        private var billingAddressFields: BillingAddressFields = BillingAddressFields.None
+        private var billingAddressFields: BillingAddressFields = DEFAULT_BILLING_ADDRESS_FIELDS
         private var shippingInfoRequired = true
         private var shippingMethodsRequired = true
         private var hiddenShippingInfoFields: List<String>? = null
         private var optionalShippingInfoFields: List<String>? = null
         private var shippingInformation: ShippingInformation? = null
         private var paymentMethodTypes: List<PaymentMethod.Type> = listOf(PaymentMethod.Type.Card)
+        private var shouldShowGooglePay: Boolean = false
         private var allowedShippingCountryCodes: Set<String> = emptySet()
         private var shippingInformationValidator: ShippingInformationValidator? = null
         private var shippingMethodsFactory: ShippingMethodsFactory? = null
         private var windowFlags: Int? = null
+        private var shouldPrefetchCustomer: Boolean = true
 
         @LayoutRes
         private var addPaymentMethodFooterLayoutId: Int = 0
@@ -184,6 +187,15 @@ data class PaymentSessionConfig internal constructor(
         }
 
         /**
+         * @param shouldShowGooglePay if `true`, will show "Google Pay" as an option on the
+         * Payment Methods selection screen. If a user selects the Google Pay option,
+         * [PaymentSessionData.useGooglePay] will be `true`.
+         */
+        fun setShouldShowGooglePay(shouldShowGooglePay: Boolean): Builder = apply {
+            this.shouldShowGooglePay = shouldShowGooglePay
+        }
+
+        /**
          * @param allowedShippingCountryCodes A set of allowed country codes for the
          * customer's shipping address. Will be ignored if empty.
          */
@@ -203,9 +215,7 @@ data class PaymentSessionConfig internal constructor(
         }
 
         /**
-         * @param shippingInformationValidator if specified, will be used to validate
-         * [ShippingInformation] in [PaymentFlowActivity] instead of sending a broadcast with
-         * [PaymentFlowExtras.EVENT_SHIPPING_INFO_SUBMITTED].
+         * @param shippingInformationValidator used to validate [ShippingInformation] in [PaymentFlowActivity]
          *
          * Note: this instance must be [Serializable].
          */
@@ -228,6 +238,16 @@ data class PaymentSessionConfig internal constructor(
             this.shippingMethodsFactory = shippingMethodsFactory
         }
 
+        /**
+         * @param shouldPrefetchCustomer If true, will immediately fetch the [Customer] associated
+         * with this session. Otherwise, will only fetch when needed.
+         *
+         * Defaults to true.
+         */
+        fun setShouldPrefetchCustomer(shouldPrefetchCustomer: Boolean): Builder = apply {
+            this.shouldPrefetchCustomer = shouldPrefetchCustomer
+        }
+
         override fun build(): PaymentSessionConfig {
             return PaymentSessionConfig(
                 hiddenShippingInfoFields = hiddenShippingInfoFields.orEmpty(),
@@ -237,12 +257,32 @@ data class PaymentSessionConfig internal constructor(
                 isShippingMethodRequired = shippingMethodsRequired,
                 addPaymentMethodFooterLayoutId = addPaymentMethodFooterLayoutId,
                 paymentMethodTypes = paymentMethodTypes,
+                shouldShowGooglePay = shouldShowGooglePay,
                 allowedShippingCountryCodes = allowedShippingCountryCodes,
-                shippingInformationValidator = shippingInformationValidator,
+                shippingInformationValidator = shippingInformationValidator
+                    ?: DefaultShippingInfoValidator(),
                 shippingMethodsFactory = shippingMethodsFactory,
                 windowFlags = windowFlags,
-                billingAddressFields = billingAddressFields
+                billingAddressFields = billingAddressFields,
+                shouldPrefetchCustomer = shouldPrefetchCustomer
             )
         }
+    }
+
+    /**
+     * A [ShippingInformationValidator] that accepts any [ShippingInformation] as valid.
+     */
+    private class DefaultShippingInfoValidator : ShippingInformationValidator {
+        override fun isValid(shippingInformation: ShippingInformation): Boolean {
+            return true
+        }
+
+        override fun getErrorMessage(shippingInformation: ShippingInformation): String {
+            return ""
+        }
+    }
+
+    private companion object {
+        private val DEFAULT_BILLING_ADDRESS_FIELDS = BillingAddressFields.PostalCode
     }
 }

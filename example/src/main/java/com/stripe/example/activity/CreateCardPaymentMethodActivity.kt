@@ -4,58 +4,69 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.snackbar.Snackbar
-import com.stripe.android.PaymentConfiguration
 import com.stripe.android.Stripe
-import com.stripe.android.model.Address
 import com.stripe.android.model.PaymentMethod
-import com.stripe.android.model.PaymentMethodCreateParams
-import com.stripe.example.R
+import com.stripe.android.view.CardValidCallback
+import com.stripe.example.StripeFactory
+import com.stripe.example.databinding.CreateCardPaymentMethodActivityBinding
+import com.stripe.example.databinding.PaymentMethodItemBinding
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
-import kotlinx.android.synthetic.main.activity_card_payment_methods.*
 
 class CreateCardPaymentMethodActivity : AppCompatActivity() {
+    private val viewBinding: CreateCardPaymentMethodActivityBinding by lazy {
+        CreateCardPaymentMethodActivityBinding.inflate(layoutInflater)
+    }
+
     private val compositeDisposable = CompositeDisposable()
 
     private val adapter: PaymentMethodsAdapter = PaymentMethodsAdapter()
     private val stripe: Stripe by lazy {
-        Stripe(
-            applicationContext,
-            PaymentConfiguration.getInstance(this).publishableKey
-        )
+        StripeFactory(this).create()
     }
-    private lateinit var snackbarContainer: View
+    private val snackbarController: SnackbarController by lazy {
+        SnackbarController(viewBinding.coordinator)
+    }
+    private val keyboardController: KeyboardController by lazy {
+        KeyboardController(this)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_card_payment_methods)
+        setContentView(viewBinding.root)
 
-        snackbarContainer = findViewById(android.R.id.content)
+        viewBinding.paymentMethods.setHasFixedSize(false)
+        viewBinding.paymentMethods.layoutManager = LinearLayoutManager(this)
+        viewBinding.paymentMethods.adapter = adapter
 
-        rv_payment_methods.setHasFixedSize(false)
-        rv_payment_methods.layoutManager = LinearLayoutManager(this)
-        rv_payment_methods.adapter = adapter
+        viewBinding.cardMultilineWidget.setCardValidCallback(object : CardValidCallback {
+            override fun onInputChanged(
+                isValid: Boolean,
+                invalidFields: Set<CardValidCallback.Fields>
+            ) {
+                // added as an example - no-op
+            }
+        })
 
-        btn_create_payment_method.setOnClickListener { createPaymentMethod() }
+        viewBinding.createButton.setOnClickListener {
+            keyboardController.hide()
+            createPaymentMethod()
+        }
     }
 
     private fun createPaymentMethod() {
-        val paymentMethodCard =
-            card_multiline_widget.paymentMethodCard ?: return
+        val paymentMethodCreateParams =
+            viewBinding.cardMultilineWidget.paymentMethodCreateParams ?: return
 
-        val createPaymentMethodParams =
-            PaymentMethodCreateParams.create(paymentMethodCard, BILLING_DETAILS)
         // Note: using this style of Observable creation results in us having a method that
         // will not be called until we subscribe to it.
         val createPaymentMethodObservable = Observable.fromCallable {
-            stripe.createPaymentMethodSynchronous(createPaymentMethodParams)
+            stripe.createPaymentMethodSynchronous(paymentMethodCreateParams)
         }
 
         compositeDisposable.add(createPaymentMethodObservable
@@ -71,18 +82,17 @@ class CreateCardPaymentMethodActivity : AppCompatActivity() {
     }
 
     private fun showSnackbar(message: String) {
-        Snackbar.make(snackbarContainer, message, Snackbar.LENGTH_LONG)
-            .show()
+        snackbarController.show(message)
     }
 
     private fun onCreatePaymentMethodStart() {
-        progress_bar.visibility = View.VISIBLE
-        btn_create_payment_method.isEnabled = false
+        viewBinding.progressBar.visibility = View.VISIBLE
+        viewBinding.createButton.isEnabled = false
     }
 
     private fun onCreatePaymentMethodCompleted() {
-        progress_bar.visibility = View.INVISIBLE
-        btn_create_payment_method.isEnabled = true
+        viewBinding.progressBar.visibility = View.INVISIBLE
+        viewBinding.createButton.isEnabled = true
     }
 
     private fun onCreatedPaymentMethod(paymentMethod: PaymentMethod?) {
@@ -108,9 +118,13 @@ class CreateCardPaymentMethodActivity : AppCompatActivity() {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PaymentMethodViewHolder {
-            val itemView = LayoutInflater.from(parent.context)
-                .inflate(R.layout.payment_method_item, parent, false)
-            return PaymentMethodViewHolder(itemView)
+            return PaymentMethodViewHolder(
+                PaymentMethodItemBinding.inflate(
+                    LayoutInflater.from(parent.context),
+                    parent,
+                    false
+                )
+            )
         }
 
         override fun getItemCount(): Int {
@@ -126,34 +140,14 @@ class CreateCardPaymentMethodActivity : AppCompatActivity() {
         }
 
         internal class PaymentMethodViewHolder internal constructor(
-            itemView: View
-        ) : RecyclerView.ViewHolder(itemView) {
-            private val idView: TextView = itemView.findViewById(R.id.pm_id)
-            private val brandView: TextView = itemView.findViewById(R.id.pm_brand)
-            private val last4View: TextView = itemView.findViewById(R.id.pm_last4)
-
+            private val viewBinding: PaymentMethodItemBinding
+        ) : RecyclerView.ViewHolder(viewBinding.root) {
             internal fun setPaymentMethod(paymentMethod: PaymentMethod) {
                 val card = paymentMethod.card
-                idView.text = paymentMethod.id
-                brandView.text = card?.brand.orEmpty()
-                last4View.text = card?.last4.orEmpty()
+                viewBinding.paymentMethodId.text = paymentMethod.id
+                viewBinding.brand.text = card?.brand.orEmpty()
+                viewBinding.last4.text = card?.last4.orEmpty()
             }
         }
-    }
-
-    private companion object {
-        private val BILLING_DETAILS =
-            PaymentMethod.BillingDetails.Builder()
-                .setName("Jenny Rosen")
-                .setPhone("4158675309")
-                .setEmail("jenny.rosen@example.com")
-                .setAddress(Address.Builder()
-                    .setLine1("123 Market St")
-                    .setLine2("#345")
-                    .setCity("San Francisco")
-                    .setPostalCode("94107")
-                    .setCountry("US")
-                    .build())
-                .build()
     }
 }

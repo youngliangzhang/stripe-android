@@ -15,6 +15,7 @@ import com.stripe.android.model.ConfirmPaymentIntentParams
 import com.stripe.android.model.ConfirmSetupIntentParams
 import com.stripe.android.model.Customer
 import com.stripe.android.model.FpxBankStatuses
+import com.stripe.android.model.ListPaymentMethodsParams
 import com.stripe.android.model.PaymentIntent
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.PaymentMethodCreateParams
@@ -23,16 +24,21 @@ import com.stripe.android.model.ShippingInformation
 import com.stripe.android.model.Source
 import com.stripe.android.model.SourceParams
 import com.stripe.android.model.Stripe3ds2AuthResult
+import com.stripe.android.model.StripeFile
+import com.stripe.android.model.StripeFileParams
 import com.stripe.android.model.StripeIntent
 import com.stripe.android.model.StripeModel
 import com.stripe.android.model.Token
+import com.stripe.android.model.TokenParams
 import com.stripe.android.model.parsers.CustomerJsonParser
+import com.stripe.android.model.parsers.FpxBankStatusesJsonParser
 import com.stripe.android.model.parsers.ModelJsonParser
 import com.stripe.android.model.parsers.PaymentIntentJsonParser
 import com.stripe.android.model.parsers.PaymentMethodJsonParser
 import com.stripe.android.model.parsers.SetupIntentJsonParser
 import com.stripe.android.model.parsers.SourceJsonParser
 import com.stripe.android.model.parsers.Stripe3ds2AuthResultJsonParser
+import com.stripe.android.model.parsers.StripeFileJsonParser
 import com.stripe.android.model.parsers.TokenJsonParser
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -46,19 +52,42 @@ import org.json.JSONException
  */
 internal class StripeApiRepository @JvmOverloads internal constructor(
     context: Context,
+    publishableKey: String,
     private val appInfo: AppInfo? = null,
     private val logger: Logger = Logger.noop(),
-    private val stripeApiRequestExecutor: ApiRequestExecutor = StripeApiRequestExecutor(logger),
-    private val fireAndForgetRequestExecutor: FireAndForgetRequestExecutor =
-        StripeFireAndForgetRequestExecutor(logger),
-    private val fingerprintRequestFactory: FingerprintRequestFactory =
-        FingerprintRequestFactory(context),
-    private val uidParamsFactory: UidParamsFactory = UidParamsFactory.create(context),
-    private val analyticsDataFactory: AnalyticsDataFactory = AnalyticsDataFactory.create(context),
-    private val networkUtils: StripeNetworkUtils = StripeNetworkUtils(context)
+    private val stripeApiRequestExecutor: ApiRequestExecutor = ApiRequestExecutor.Default(logger),
+    private val analyticsRequestExecutor: AnalyticsRequestExecutor =
+        AnalyticsRequestExecutor.Default(logger),
+    private val fingerprintDataRepository: FingerprintDataRepository =
+        FingerprintDataRepository.Default(context),
+    private val apiFingerprintParamsFactory: ApiFingerprintParamsFactory =
+        ApiFingerprintParamsFactory(context),
+    private val analyticsDataFactory: AnalyticsDataFactory =
+        AnalyticsDataFactory(context, publishableKey),
+    private val fingerprintParamsUtils: FingerprintParamsUtils = FingerprintParamsUtils(context),
+    apiVersion: String = ApiVersion.get().code,
+    sdkVersion: String = Stripe.VERSION
 ) : StripeRepository {
+    private val analyticsRequestFactory = AnalyticsRequest.Factory(logger)
+    private val apiRequestFactory = ApiRequest.Factory(
+        appInfo = appInfo,
+        apiVersion = apiVersion,
+        sdkVersion = sdkVersion
+    )
+
+    private val fingerprintGuid: String?
+        get() {
+            return fingerprintDataRepository.get()?.guid
+        }
+
+    init {
+        fireFingerprintRequest()
+    }
+
     /**
      * Confirm a [PaymentIntent] using the provided [ConfirmPaymentIntentParams]
+     *
+     * Analytics event: [AnalyticsEvent.PaymentIntentConfirm]
      *
      * @param confirmPaymentIntentParams contains the confirmation params
      * @return a [PaymentIntent] reflecting the updated state after applying the parameter
@@ -68,9 +97,14 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         APIConnectionException::class, APIException::class)
     override fun confirmPaymentIntent(
         confirmPaymentIntentParams: ConfirmPaymentIntentParams,
-        options: ApiRequest.Options
+        options: ApiRequest.Options,
+        expandFields: List<String>
     ): PaymentIntent? {
-        val params = networkUtils.paramsWithUid(confirmPaymentIntentParams.toParamMap())
+        val params = fingerprintParamsUtils.addFingerprintData(
+            confirmPaymentIntentParams.toParamMap()
+                .plus(createExpandParam(expandFields)),
+            fingerprintGuid
+        )
         val apiUrl = getConfirmPaymentIntentUrl(
             PaymentIntent.ClientSecret(confirmPaymentIntentParams.clientSecret).paymentIntentId
         )
@@ -83,18 +117,14 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
                     ?: confirmPaymentIntentParams.sourceParams?.type
 
             fireAnalyticsRequest(
-                analyticsDataFactory.getPaymentIntentConfirmationParams(
-                    null,
-                    options.apiKey,
+                analyticsDataFactory.createPaymentIntentConfirmationParams(
                     paymentMethodType
                 ),
                 options.apiKey
             )
 
             return fetchStripeModel(
-                ApiRequest.createPost(
-                    apiUrl, options, params, appInfo
-                ),
+                apiRequestFactory.createPost(apiUrl, options, params),
                 PaymentIntentJsonParser()
             )
         } catch (unexpected: CardException) {
@@ -106,30 +136,31 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
     /**
      * Retrieve a [PaymentIntent] using its client_secret
      *
+     * Analytics event: [AnalyticsEvent.PaymentIntentRetrieve]
+     *
      * @param clientSecret client_secret of the PaymentIntent to retrieve
      */
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, APIException::class)
     override fun retrievePaymentIntent(
         clientSecret: String,
-        options: ApiRequest.Options
+        options: ApiRequest.Options,
+        expandFields: List<String>
     ): PaymentIntent? {
-        val apiUrl = getRetrievePaymentIntentUrl(
-            PaymentIntent.ClientSecret(clientSecret).paymentIntentId
+        val paymentIntentId = PaymentIntent.ClientSecret(clientSecret).paymentIntentId
+
+        fireFingerprintRequest()
+        fireAnalyticsRequest(
+            analyticsDataFactory.createPaymentIntentRetrieveParams(paymentIntentId),
+            options.apiKey
         )
 
         try {
-            fireFingerprintRequest()
-            fireAnalyticsRequest(
-                analyticsDataFactory.getPaymentIntentRetrieveParams(null, options.apiKey),
-                options.apiKey)
-
             return fetchStripeModel(
-                ApiRequest.createGet(
-                    apiUrl,
+                apiRequestFactory.createGet(
+                    getRetrievePaymentIntentUrl(paymentIntentId),
                     options,
-                    createClientSecretParam(clientSecret),
-                    appInfo
+                    createClientSecretParam(clientSecret, expandFields)
                 ),
                 PaymentIntentJsonParser()
             )
@@ -139,6 +170,9 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         }
     }
 
+    /**
+     * Analytics event: [AnalyticsEvent.PaymentIntentCancelSource]
+     */
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, APIException::class)
     override fun cancelPaymentIntentSource(
@@ -146,15 +180,15 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         sourceId: String,
         options: ApiRequest.Options
     ): PaymentIntent? {
-        val apiUrl = getCancelPaymentIntentSourceUrl(paymentIntentId)
+        fireFingerprintRequest()
+        fireAnalyticsRequest(AnalyticsEvent.PaymentIntentCancelSource, options.apiKey)
+
         try {
-            fireFingerprintRequest()
             return fetchStripeModel(
-                ApiRequest.createPost(
-                    apiUrl,
+                apiRequestFactory.createPost(
+                    getCancelPaymentIntentSourceUrl(paymentIntentId),
                     options,
-                    mapOf("source" to sourceId),
-                    appInfo
+                    mapOf("source" to sourceId)
                 ),
                 PaymentIntentJsonParser()
             )
@@ -167,6 +201,8 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
     /**
      * Confirm a [SetupIntent] using the provided [ConfirmSetupIntentParams]
      *
+     * Analytics event: [AnalyticsEvent.SetupIntentConfirm]
+     *
      * @param confirmSetupIntentParams contains the confirmation params
      * @return a [SetupIntent] reflecting the updated state after applying the parameter
      * provided
@@ -175,34 +211,34 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         APIConnectionException::class, APIException::class)
     override fun confirmSetupIntent(
         confirmSetupIntentParams: ConfirmSetupIntentParams,
-        options: ApiRequest.Options
+        options: ApiRequest.Options,
+        expandFields: List<String>
     ): SetupIntent? {
-        val params = networkUtils.paramsWithUid(confirmSetupIntentParams.toParamMap())
-
-        val apiUrl = getConfirmSetupIntentUrl(
+        val setupIntentId =
             SetupIntent.ClientSecret(confirmSetupIntentParams.clientSecret).setupIntentId
+
+        fireFingerprintRequest()
+        fireAnalyticsRequest(
+            analyticsDataFactory.createSetupIntentConfirmationParams(
+                confirmSetupIntentParams.paymentMethodCreateParams?.typeCode,
+                setupIntentId
+            ),
+            options.apiKey
         )
 
         try {
-            fireFingerprintRequest()
-            val setupIntent = fetchStripeModel(
-                ApiRequest.createPost(
-                    apiUrl,
+            return fetchStripeModel(
+                apiRequestFactory.createPost(
+                    getConfirmSetupIntentUrl(setupIntentId),
                     options,
-                    params,
-                    appInfo
+                    fingerprintParamsUtils.addFingerprintData(
+                        confirmSetupIntentParams.toParamMap()
+                            .plus(createExpandParam(expandFields)),
+                        fingerprintGuid
+                    )
                 ),
                 SetupIntentJsonParser()
             )
-
-            fireAnalyticsRequest(
-                analyticsDataFactory.getSetupIntentConfirmationParams(
-                    options.apiKey,
-                    confirmSetupIntentParams.paymentMethodCreateParams?.typeCode
-                ),
-                options.apiKey
-            )
-            return setupIntent
         } catch (unexpected: CardException) {
             // This particular kind of exception should not be possible from a Source API endpoint.
             throw APIException.create(unexpected)
@@ -212,30 +248,33 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
     /**
      * Retrieve a [SetupIntent] using its client_secret
      *
+     * Analytics event: [AnalyticsEvent.SetupIntentRetrieve]
+     *
      * @param clientSecret client_secret of the SetupIntent to retrieve
      */
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, APIException::class)
     override fun retrieveSetupIntent(
         clientSecret: String,
-        options: ApiRequest.Options
+        options: ApiRequest.Options,
+        expandFields: List<String>
     ): SetupIntent? {
         val setupIntentId = SetupIntent.ClientSecret(clientSecret).setupIntentId
-        val apiUrl = getRetrieveSetupIntentUrl(setupIntentId)
 
         try {
             fireFingerprintRequest()
             fireAnalyticsRequest(
-                analyticsDataFactory.getSetupIntentRetrieveParams(options.apiKey),
+                analyticsDataFactory.createSetupIntentRetrieveParams(
+                    setupIntentId
+                ),
                 options.apiKey
             )
 
             return fetchStripeModel(
-                ApiRequest.createGet(
-                    apiUrl,
+                apiRequestFactory.createGet(
+                    getRetrieveSetupIntentUrl(setupIntentId),
                     options,
-                    createClientSecretParam(clientSecret),
-                    appInfo
+                    createClientSecretParam(clientSecret, expandFields)
                 ),
                 SetupIntentJsonParser()
             )
@@ -245,6 +284,9 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         }
     }
 
+    /**
+     * Analytics event: [AnalyticsEvent.SetupIntentCancelSource]
+     */
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, APIException::class)
     override fun cancelSetupIntentSource(
@@ -252,15 +294,14 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         sourceId: String,
         options: ApiRequest.Options
     ): SetupIntent? {
-        val apiUrl = getCancelSetupIntentSourceUrl(setupIntentId)
+        fireAnalyticsRequest(AnalyticsEvent.SetupIntentCancelSource, options.apiKey)
 
         try {
             return fetchStripeModel(
-                ApiRequest.createPost(
-                    apiUrl,
+                apiRequestFactory.createPost(
+                    getCancelSetupIntentSourceUrl(setupIntentId),
                     options,
-                    mapOf("source" to sourceId),
-                    appInfo
+                    mapOf("source" to sourceId)
                 ),
                 SetupIntentJsonParser()
             )
@@ -273,10 +314,16 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
     override fun retrieveIntent(
         clientSecret: String,
         options: ApiRequest.Options,
+        expandFields: List<String>,
         callback: ApiResultCallback<StripeIntent>
     ) {
-        RetrieveIntentTask(this, clientSecret, options, callback)
-            .execute()
+        RetrieveIntentTask(
+            this,
+            clientSecret,
+            options,
+            expandFields,
+            callback
+        ).execute()
     }
 
     override fun cancelIntent(
@@ -292,13 +339,11 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
     /**
      * Create a [Source] using the input [SourceParams].
      *
+     * Analytics event: [AnalyticsEvent.SourceCreate]
+     *
      * @param sourceParams a [SourceParams] object with [Source] creation params
      * @return a [Source] if one could be created from the input params,
      * or `null` if not
-     * @throws AuthenticationException if there is a problem authenticating to the Stripe API
-     * @throws InvalidRequestException if one or more of the parameters is incorrect
-     * @throws APIConnectionException if there is a problem connecting to the Stripe API
-     * @throws APIException for unknown Stripe API errors. These should be rare.
      */
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, APIException::class)
@@ -306,21 +351,22 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         sourceParams: SourceParams,
         options: ApiRequest.Options
     ): Source? {
-        val apiUrl = sourcesUrl
+        fireFingerprintRequest()
+        fireAnalyticsRequest(
+            analyticsDataFactory.createSourceCreationParams(
+                sourceParams.type,
+                sourceParams.attribution
+            ),
+            options.apiKey
+        )
 
         try {
-            fireFingerprintRequest()
-            fireAnalyticsRequest(
-                analyticsDataFactory.getSourceCreationParams(options.apiKey, sourceParams.type),
-                options.apiKey
-            )
             return fetchStripeModel(
-                ApiRequest.createPost(
-                    apiUrl,
+                apiRequestFactory.createPost(
+                    sourcesUrl,
                     options,
                     sourceParams.toParamMap()
-                        .plus(uidParamsFactory.createParams()),
-                    appInfo
+                        .plus(apiFingerprintParamsFactory.createParams(fingerprintGuid))
                 ),
                 SourceJsonParser()
             )
@@ -337,11 +383,6 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
      * @param clientSecret the [Source.clientSecret] field for the Source to query
      * @return a [Source] if one could be retrieved for the input params, or `null` if
      * no such Source could be found.
-     *
-     * @throws AuthenticationException if there is a problem authenticating to the Stripe API
-     * @throws InvalidRequestException if one or more of the parameters is incorrect
-     * @throws APIConnectionException if there is a problem connecting to the Stripe API
-     * @throws APIException for unknown Stripe API errors. These should be rare.
      */
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, APIException::class)
@@ -352,13 +393,17 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
     ): Source? {
         val apiUrl = getRetrieveSourceApiUrl(sourceId)
 
+        fireAnalyticsRequest(
+            analyticsDataFactory.createSourceRetrieveParams(sourceId),
+            options.apiKey
+        )
+
         try {
             return fetchStripeModel(
-                ApiRequest.createGet(
+                apiRequestFactory.createGet(
                     apiUrl,
                     options,
-                    SourceParams.createRetrieveSourceParams(clientSecret),
-                    appInfo
+                    SourceParams.createRetrieveSourceParams(clientSecret)
                 ),
                 SourceJsonParser()
             )
@@ -368,32 +413,42 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         }
     }
 
+    override fun retrieveSource(
+        sourceId: String,
+        clientSecret: String,
+        options: ApiRequest.Options,
+        callback: ApiResultCallback<Source>
+    ) {
+        RetrieveSourceTask(this, sourceId, clientSecret, options, callback).execute()
+    }
+
+    /**
+     * Analytics event: [AnalyticsEvent.PaymentMethodCreate]
+     */
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, APIException::class)
     override fun createPaymentMethod(
         paymentMethodCreateParams: PaymentMethodCreateParams,
         options: ApiRequest.Options
     ): PaymentMethod? {
-        val apiUrl = paymentMethodsUrl
-
         fireFingerprintRequest()
 
         try {
             val paymentMethod = fetchStripeModel(
-                ApiRequest.createPost(
-                    apiUrl,
+                apiRequestFactory.createPost(
+                    paymentMethodsUrl,
                     options,
                     paymentMethodCreateParams.toParamMap()
-                        .plus(uidParamsFactory.createParams()),
-                    appInfo
+                        .plus(apiFingerprintParamsFactory.createParams(fingerprintGuid))
                 ),
                 PaymentMethodJsonParser()
             )
 
             fireAnalyticsRequest(
                 analyticsDataFactory.createPaymentMethodCreationParams(
-                    options.apiKey,
-                    paymentMethod?.id
+                    paymentMethod?.id,
+                    paymentMethod?.type,
+                    productUsageTokens = paymentMethodCreateParams.attribution
                 ),
                 options.apiKey
             )
@@ -408,48 +463,50 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
     /**
      * Create a [Token] using the input token parameters.
      *
-     * @param tokenParams a mapped set of parameters representing the object for which this token
-     * is being created
+     * Analytics event: [AnalyticsEvent.TokenCreate]
+     *
+     * @param tokenParams a [TokenParams] representing the object for which this token is being created
      * @param options a [ApiRequest.Options] object that contains connection data like the api
      * key, api version, etc
-     * @param tokenType the [Token.TokenType] being created
+     *
      * @return a [Token] that can be used to perform other operations with this card
-     * @throws AuthenticationException if there is a problem authenticating to the Stripe API
-     * @throws InvalidRequestException if one or more of the parameters is incorrect
-     * @throws APIConnectionException if there is a problem connecting to the Stripe API
-     * @throws CardException if there is a problem with the card information
-     * @throws APIException for unknown Stripe API errors. These should be rare.
      */
     @Throws(AuthenticationException::class, InvalidRequestException::class,
         APIConnectionException::class, CardException::class, APIException::class)
     override fun createToken(
-        tokenParams: Map<String, *>,
-        options: ApiRequest.Options,
-        @Token.TokenType tokenType: String
+        tokenParams: TokenParams,
+        options: ApiRequest.Options
     ): Token? {
-        try {
-            fireFingerprintRequest()
+        fireFingerprintRequest()
 
-            fireAnalyticsRequest(
-                analyticsDataFactory.getTokenCreationParams(
-                    tokenParams[AnalyticsDataFactory.FIELD_PRODUCT_USAGE] as List<String>?,
-                    options.apiKey,
-                    tokenType
-                ),
-                options.apiKey
-            )
-        } catch (classCastEx: ClassCastException) {
-            // This can only happen if someone puts a weird object in the map.
-        }
+        fireAnalyticsRequest(
+            analyticsDataFactory.createTokenCreationParams(
+                productUsageTokens = tokenParams.attribution,
+                tokenType = tokenParams.tokenType
+            ),
+            options.apiKey
+        )
 
-        return requestToken(
-            tokensUrl,
-            tokenParams.minus(AnalyticsDataFactory.FIELD_PRODUCT_USAGE),
-            options
+        return fetchStripeModel(
+            apiRequestFactory.createPost(
+                tokensUrl,
+                options,
+                tokenParams.toParamMap()
+                    .plus(
+                        apiFingerprintParamsFactory.createParams(
+                            fingerprintGuid
+                        )
+                    )
+            ),
+            TokenJsonParser()
         )
     }
 
-    @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class, AuthenticationException::class, CardException::class)
+    /**
+     * Analytics event: [AnalyticsEvent.CustomerAddSource]
+     */
+    @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class,
+        AuthenticationException::class, CardException::class)
     override fun addCustomerSource(
         customerId: String,
         publishableKey: String,
@@ -459,23 +516,26 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         requestOptions: ApiRequest.Options
     ): Source? {
         fireAnalyticsRequest(
-            analyticsDataFactory
-                .getAddSourceParams(productUsageTokens.toList(), publishableKey, sourceType),
-            // We use the public key to log, so we need different Options.
+            analyticsDataFactory.createAddSourceParams(
+                productUsageTokens,
+                sourceType
+            ),
             publishableKey
         )
 
         return fetchStripeModel(
-            ApiRequest.createPost(
+            apiRequestFactory.createPost(
                 getAddCustomerSourceUrl(customerId),
                 requestOptions,
-                mapOf("source" to sourceId),
-                appInfo
+                mapOf("source" to sourceId)
             ),
             SourceJsonParser()
         )
     }
 
+    /**
+     * Analytics event: [AnalyticsEvent.CustomerDeleteSource]
+     */
     @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class,
         AuthenticationException::class, CardException::class)
     override fun deleteCustomerSource(
@@ -486,20 +546,22 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         requestOptions: ApiRequest.Options
     ): Source? {
         fireAnalyticsRequest(
-            analyticsDataFactory.getDeleteSourceParams(productUsageTokens.toList(), publishableKey),
-            // We use the public key to log, so we need different Options.
+            analyticsDataFactory.createDeleteSourceParams(productUsageTokens),
             publishableKey
         )
 
         return fetchStripeModel(
-            ApiRequest.createDelete(
+            apiRequestFactory.createDelete(
                 getDeleteCustomerSourceUrl(customerId, sourceId),
-                requestOptions, appInfo
+                requestOptions
             ),
             SourceJsonParser()
         )
     }
 
+    /**
+     * Analytics event: [AnalyticsEvent.CustomerAttachPaymentMethod]
+     */
     @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class,
         AuthenticationException::class, CardException::class)
     override fun attachPaymentMethod(
@@ -509,23 +571,26 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         paymentMethodId: String,
         requestOptions: ApiRequest.Options
     ): PaymentMethod? {
+        fireFingerprintRequest()
         fireAnalyticsRequest(
             analyticsDataFactory
-                .getAttachPaymentMethodParams(productUsageTokens.toList(), publishableKey),
-            // We use the public key to log, so we need different Options.
+                .createAttachPaymentMethodParams(productUsageTokens),
             publishableKey
         )
 
         return fetchStripeModel(
-            ApiRequest.createPost(
+            apiRequestFactory.createPost(
                 getAttachPaymentMethodUrl(paymentMethodId),
                 requestOptions,
-                mapOf("customer" to customerId), appInfo
+                mapOf("customer" to customerId)
             ),
             PaymentMethodJsonParser()
         )
     }
 
+    /**
+     * Analytics event: [AnalyticsEvent.CustomerDetachPaymentMethod]
+     */
     @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class,
         AuthenticationException::class, CardException::class)
     override fun detachPaymentMethod(
@@ -536,16 +601,14 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
     ): PaymentMethod? {
         fireAnalyticsRequest(
             analyticsDataFactory
-                .getDetachPaymentMethodParams(productUsageTokens.toList(), publishableKey),
-            // We use the public key to log, so we need different Options.
+                .createDetachPaymentMethodParams(productUsageTokens),
             publishableKey
         )
 
         return fetchStripeModel(
-            ApiRequest.createPost(
+            apiRequestFactory.createPost(
                 getDetachPaymentMethodUrl(paymentMethodId),
-                requestOptions,
-                appInfo = appInfo
+                requestOptions
             ),
             PaymentMethodJsonParser()
         )
@@ -553,33 +616,31 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
 
     /**
      * Retrieve a Customer's [PaymentMethod]s
+     *
+     * Analytics event: [AnalyticsEvent.CustomerRetrievePaymentMethods]
      */
     @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class,
         AuthenticationException::class, CardException::class)
     override fun getPaymentMethods(
-        customerId: String,
-        paymentMethodType: String,
+        listPaymentMethodsParams: ListPaymentMethodsParams,
         publishableKey: String,
         productUsageTokens: Set<String>,
         requestOptions: ApiRequest.Options
     ): List<PaymentMethod> {
-        val queryParams = mapOf(
-            "customer" to customerId,
-            "type" to paymentMethodType
+        val response = makeApiRequest(
+            apiRequestFactory.createGet(
+                paymentMethodsUrl,
+                requestOptions,
+                listPaymentMethodsParams.toParamMap()
+            )
         )
 
         fireAnalyticsRequest(
-            analyticsDataFactory
-                .getDetachPaymentMethodParams(productUsageTokens.toList(), publishableKey),
-            // We use the public key to log, so we need different Options.
+            analyticsDataFactory.createParams(
+                AnalyticsEvent.CustomerRetrievePaymentMethods,
+                productUsageTokens = productUsageTokens
+            ),
             publishableKey
-        )
-
-        val response = makeApiRequest(
-            ApiRequest.createGet(
-                paymentMethodsUrl,
-                requestOptions,
-                queryParams, appInfo)
         )
 
         return try {
@@ -592,6 +653,9 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         }
     }
 
+    /**
+     * Analytics event: [AnalyticsEvent.CustomerSetDefaultSource]
+     */
     @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class,
         AuthenticationException::class, CardException::class)
     override fun setDefaultCustomerSource(
@@ -603,26 +667,27 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         requestOptions: ApiRequest.Options
     ): Customer? {
         fireAnalyticsRequest(
-            analyticsDataFactory.getEventLoggingParams(
-                eventName = AnalyticsDataFactory.EventName.DEFAULT_SOURCE,
-                publishableKey = publishableKey,
-                productUsageTokens = productUsageTokens.toList(),
+            analyticsDataFactory.createParams(
+                event = AnalyticsEvent.CustomerSetDefaultSource,
+                productUsageTokens = productUsageTokens,
                 sourceType = sourceType
             ),
             publishableKey
         )
 
         return fetchStripeModel(
-            ApiRequest.createPost(
+            apiRequestFactory.createPost(
                 getRetrieveCustomerUrl(customerId),
                 requestOptions,
-                mapOf("default_source" to sourceId),
-                appInfo
+                mapOf("default_source" to sourceId)
             ),
             CustomerJsonParser()
         )
     }
 
+    /**
+     * Analytics event: [AnalyticsEvent.CustomerSetShippingInfo]
+     */
     @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class,
         AuthenticationException::class, CardException::class)
     override fun setCustomerShippingInfo(
@@ -633,40 +698,53 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         requestOptions: ApiRequest.Options
     ): Customer? {
         fireAnalyticsRequest(
-            analyticsDataFactory.getEventLoggingParams(
-                AnalyticsDataFactory.EventName.SET_SHIPPING_INFO,
-                publishableKey,
-                productUsageTokens = productUsageTokens.toList()
+            analyticsDataFactory.createParams(
+                AnalyticsEvent.CustomerSetShippingInfo,
+                productUsageTokens = productUsageTokens
             ),
             publishableKey
         )
 
         return fetchStripeModel(
-            ApiRequest.createPost(
+            apiRequestFactory.createPost(
                 getRetrieveCustomerUrl(customerId),
                 requestOptions,
-                mapOf("shipping" to shippingInformation.toParamMap()), appInfo
+                mapOf("shipping" to shippingInformation.toParamMap())
             ),
             CustomerJsonParser()
         )
     }
 
+    /**
+     * Analytics event: [AnalyticsEvent.CustomerRetrieve]
+     */
     @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class,
         AuthenticationException::class, CardException::class)
     override fun retrieveCustomer(
         customerId: String,
+        productUsageTokens: Set<String>,
         requestOptions: ApiRequest.Options
     ): Customer? {
+        fireAnalyticsRequest(
+            analyticsDataFactory.createParams(
+                AnalyticsEvent.CustomerRetrieve,
+                productUsageTokens = productUsageTokens
+            ),
+            requestOptions.apiKey
+        )
+
         return fetchStripeModel(
-            ApiRequest.createGet(
+            apiRequestFactory.createGet(
                 getRetrieveCustomerUrl(customerId),
-                requestOptions,
-                appInfo = appInfo
+                requestOptions
             ),
             CustomerJsonParser()
         )
     }
 
+    /**
+     * Analytics event: [AnalyticsEvent.IssuingRetrievePin]
+     */
     @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class,
         AuthenticationException::class, CardException::class, JSONException::class)
     override fun retrieveIssuingCardPin(
@@ -675,17 +753,24 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         userOneTimeCode: String,
         ephemeralKeySecret: String
     ): String {
+        fireAnalyticsRequest(
+            AnalyticsEvent.IssuingRetrievePin,
+            ephemeralKeySecret
+        )
+
         val response = makeApiRequest(
-            ApiRequest.createGet(
+            apiRequestFactory.createGet(
                 getIssuingCardPinUrl(cardId),
                 ApiRequest.Options(ephemeralKeySecret),
-                mapOf("verification" to createVerificationParam(verificationId, userOneTimeCode)),
-                appInfo
+                mapOf("verification" to createVerificationParam(verificationId, userOneTimeCode))
             )
         )
         return response.responseJson.getString("pin")
     }
 
+    /**
+     * Analytics event: [AnalyticsEvent.IssuingUpdatePin]
+     */
     @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class,
         AuthenticationException::class, CardException::class)
     override fun updateIssuingCardPin(
@@ -695,15 +780,19 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         userOneTimeCode: String,
         ephemeralKeySecret: String
     ) {
+        fireAnalyticsRequest(
+            AnalyticsEvent.IssuingUpdatePin,
+            ephemeralKeySecret
+        )
+
         makeApiRequest(
-            ApiRequest.createPost(
+            apiRequestFactory.createPost(
                 getIssuingCardPinUrl(cardId),
                 ApiRequest.Options(ephemeralKeySecret),
                 mapOf(
                     "verification" to createVerificationParam(verificationId, userOneTimeCode),
                     "pin" to newPin
-                ),
-                appInfo
+                )
             )
         )
     }
@@ -712,16 +801,18 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         APIConnectionException::class, APIException::class, CardException::class)
     override fun getFpxBankStatus(options: ApiRequest.Options): FpxBankStatuses {
         val response = makeApiRequest(
-            ApiRequest.createGet(
+            apiRequestFactory.createGet(
                 getApiUrl("fpx/bank_statuses"),
                 options,
-                mapOf("account_holder_type" to "individual"),
-                appInfo
+                mapOf("account_holder_type" to "individual")
             )
         )
-        return FpxBankStatuses.fromJson(response.responseJson)
+        return FpxBankStatusesJsonParser().parse(response.responseJson)
     }
 
+    /**
+     * Analytics event: [AnalyticsEvent.Auth3ds2Start]
+     */
     @VisibleForTesting
     @Throws(InvalidRequestException::class, APIConnectionException::class, APIException::class,
         CardException::class, AuthenticationException::class, JSONException::class)
@@ -732,17 +823,17 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
     ): Stripe3ds2AuthResult {
         fireAnalyticsRequest(
             analyticsDataFactory.createAuthParams(
-                AnalyticsDataFactory.EventName.AUTH_3DS2_START,
-                stripeIntentId, requestOptions.apiKey),
+                AnalyticsEvent.Auth3ds2Start,
+                stripeIntentId
+            ),
             requestOptions.apiKey
         )
 
         val response = makeApiRequest(
-            ApiRequest.createPost(
+            apiRequestFactory.createPost(
                 getApiUrl("3ds2/authenticate"),
                 requestOptions,
-                authParams.toParamMap(),
-                appInfo
+                authParams.toParamMap()
             )
         )
 
@@ -764,11 +855,10 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         CardException::class, AuthenticationException::class)
     internal fun complete3ds2Auth(sourceId: String, requestOptions: ApiRequest.Options): Boolean {
         val response = makeApiRequest(
-            ApiRequest.createPost(
+            apiRequestFactory.createPost(
                 getApiUrl("3ds2/challenge_complete"),
                 requestOptions,
-                mapOf("source" to sourceId),
-                appInfo
+                mapOf("source" to sourceId)
             )
         )
         return response.isOk
@@ -784,6 +874,20 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
     }
 
     /**
+     * Analytics event: [AnalyticsEvent.FileCreate]
+     */
+    override fun createFile(
+        fileParams: StripeFileParams,
+        requestOptions: ApiRequest.Options
+    ): StripeFile {
+        val response = makeFileUploadRequest(
+            FileUploadRequest(fileParams, requestOptions, appInfo)
+        )
+        fireAnalyticsRequest(AnalyticsEvent.FileCreate, requestOptions.apiKey)
+        return StripeFileJsonParser().parse(response.responseJson)
+    }
+
+    /**
      * @return `https://api.stripe.com/v1/payment_methods/:id/detach`
      */
     @VisibleForTesting
@@ -795,42 +899,30 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         APIException::class)
     private fun handleApiError(response: StripeResponse) {
         val requestId = response.requestId
-        val responseCode = response.responseCode
-        val stripeError = ErrorParser.parseError(response.responseJson)
+        val responseCode = response.code
+        val stripeError = StripeErrorJsonParser().parse(response.responseJson)
         when (responseCode) {
             HttpURLConnection.HTTP_BAD_REQUEST, HttpURLConnection.HTTP_NOT_FOUND -> {
                 throw InvalidRequestException(
-                    stripeError.message,
-                    stripeError.param,
+                    stripeError,
                     requestId,
-                    responseCode,
-                    stripeError.code,
-                    stripeError.declineCode,
-                    stripeError, null)
-            }
-            HttpURLConnection.HTTP_UNAUTHORIZED -> {
-                throw AuthenticationException(stripeError.message, requestId, stripeError)
-            }
-            HttpURLConnection.HTTP_PAYMENT_REQUIRED -> {
-                throw CardException(
-                    stripeError.message,
-                    requestId,
-                    stripeError.code,
-                    stripeError.param,
-                    stripeError.declineCode,
-                    stripeError.charge,
-                    stripeError
+                    responseCode
                 )
             }
+            HttpURLConnection.HTTP_UNAUTHORIZED -> {
+                throw AuthenticationException(stripeError, requestId)
+            }
+            HttpURLConnection.HTTP_PAYMENT_REQUIRED -> {
+                throw CardException(stripeError, requestId)
+            }
             HttpURLConnection.HTTP_FORBIDDEN -> {
-                throw PermissionException(stripeError.message, requestId, stripeError)
+                throw PermissionException(stripeError, requestId)
             }
             429 -> {
-                throw RateLimitException(stripeError.message, stripeError.param, requestId,
-                    stripeError)
+                throw RateLimitException(stripeError, requestId)
             }
             else -> {
-                throw APIException(stripeError.message, requestId, responseCode, stripeError, null)
+                throw APIException(stripeError, requestId, responseCode)
             }
         }
     }
@@ -854,7 +946,7 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
             throw APIConnectionException.create(ex, apiRequest.baseUrl)
         }
 
-        if (response.hasErrorCode()) {
+        if (response.isError) {
             handleApiError(response)
         }
 
@@ -863,8 +955,29 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         return response
     }
 
-    private fun makeFireAndForgetRequest(request: StripeRequest) {
-        fireAndForgetRequestExecutor.executeAsync(request)
+    @VisibleForTesting
+    @Throws(AuthenticationException::class, InvalidRequestException::class,
+        APIConnectionException::class, CardException::class, APIException::class)
+    internal fun makeFileUploadRequest(fileUploadRequest: FileUploadRequest): StripeResponse {
+        val dnsCacheData = disableDnsCache()
+
+        val response = try {
+            stripeApiRequestExecutor.execute(fileUploadRequest)
+        } catch (ex: IOException) {
+            throw APIConnectionException.create(ex, fileUploadRequest.baseUrl)
+        }
+
+        if (response.isError) {
+            handleApiError(response)
+        }
+
+        resetDnsCacheTtl(dnsCacheData)
+
+        return response
+    }
+
+    private fun makeAnalyticsRequest(request: AnalyticsRequest) {
+        analyticsRequestExecutor.executeAsync(request)
     }
 
     private fun disableDnsCache(): Pair<Boolean, String> {
@@ -891,39 +1004,40 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         }
     }
 
-    @Throws(AuthenticationException::class, InvalidRequestException::class,
-        APIConnectionException::class, CardException::class, APIException::class)
-    private fun requestToken(
-        url: String,
-        params: Map<String, *>,
-        options: ApiRequest.Options
-    ): Token? {
-        return fetchStripeModel(
-            ApiRequest.createPost(url, options, params, appInfo),
-            TokenJsonParser()
-        )
+    private fun fireFingerprintRequest() {
+        fingerprintDataRepository.refresh()
     }
 
-    private fun fireFingerprintRequest() {
-        makeFireAndForgetRequest(fingerprintRequestFactory.create())
+    private fun fireAnalyticsRequest(
+        event: AnalyticsEvent,
+        publishableKey: String
+    ) {
+        fireAnalyticsRequest(
+            analyticsDataFactory.createParams(event),
+            publishableKey
+        )
     }
 
     @VisibleForTesting
     internal fun fireAnalyticsRequest(
-        loggingMap: Map<String, Any>,
+        params: Map<String, Any>,
         publishableKey: String
     ) {
-        makeFireAndForgetRequest(
-            AnalyticsRequest.create(
-                loggingMap,
+        makeAnalyticsRequest(
+            analyticsRequestFactory.create(
+                params,
                 ApiRequest.Options(publishableKey),
                 appInfo
             )
         )
     }
 
-    private fun createClientSecretParam(clientSecret: String): Map<String, String> {
+    private fun createClientSecretParam(
+        clientSecret: String,
+        expandFields: List<String>
+    ): Map<String, Any> {
         return mapOf("client_secret" to clientSecret)
+            .plus(createExpandParam(expandFields))
     }
 
     private class Start3ds2AuthTask constructor(
@@ -955,6 +1069,7 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         private val stripeRepository: StripeRepository,
         private val clientSecret: String,
         private val requestOptions: ApiRequest.Options,
+        private val expandFields: List<String>,
         callback: ApiResultCallback<StripeIntent>
     ) : ApiOperation<StripeIntent>(callback = callback) {
 
@@ -962,9 +1077,17 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
         override suspend fun getResult(): StripeIntent? {
             return when {
                 clientSecret.startsWith("pi_") ->
-                    stripeRepository.retrievePaymentIntent(clientSecret, requestOptions)
+                    stripeRepository.retrievePaymentIntent(
+                        clientSecret,
+                        requestOptions,
+                        expandFields
+                    )
                 clientSecret.startsWith("seti_") ->
-                    stripeRepository.retrieveSetupIntent(clientSecret, requestOptions)
+                    stripeRepository.retrieveSetupIntent(
+                        clientSecret,
+                        requestOptions,
+                        expandFields
+                    )
                 else -> null
             }
         }
@@ -991,6 +1114,20 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
                     )
                 else -> null
             }
+        }
+    }
+
+    private class RetrieveSourceTask constructor(
+        private val stripeRepository: StripeRepository,
+        private val sourceId: String,
+        private val clientSecret: String,
+        private val requestOptions: ApiRequest.Options,
+        callback: ApiResultCallback<Source>
+    ) : ApiOperation<Source>(callback = callback) {
+
+        @Throws(StripeException::class)
+        override suspend fun getResult(): Source? {
+            return stripeRepository.retrieveSource(sourceId, clientSecret, requestOptions)
         }
     }
 
@@ -1151,6 +1288,12 @@ internal class StripeApiRepository @JvmOverloads internal constructor(
 
         private fun getApiUrl(path: String): String {
             return "${ApiRequest.API_HOST}/v1/$path"
+        }
+
+        private fun createExpandParam(expandFields: List<String>): Map<String, List<String>> {
+            return expandFields.takeIf { it.isNotEmpty() }?.let {
+                mapOf("expand" to it)
+            }.orEmpty()
         }
     }
 }

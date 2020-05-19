@@ -1,35 +1,41 @@
 package com.stripe.android.exception
 
 import com.stripe.android.StripeError
+import java.util.Objects
 
 /**
- * A base class for Stripe-related [Exceptions][Exception].
+ * A base class for Stripe-related exceptions.
  */
-abstract class StripeException @JvmOverloads constructor(
-    val stripeError: StripeError?,
-    message: String?,
-    val requestId: String?,
-    val statusCode: Int,
-    e: Throwable? = null
-) : Exception(message, e) {
-
-    constructor(
-        message: String?,
-        requestId: String?,
-        statusCode: Int,
-        e: Throwable?
-    ) : this(null, message, requestId, statusCode, e)
-
+abstract class StripeException(
+    val stripeError: StripeError? = null,
+    val requestId: String? = null,
+    val statusCode: Int = 0,
+    cause: Throwable? = null,
+    message: String? = stripeError?.message
+) : Exception(message, cause) {
     override fun toString(): String {
-        val reqIdStr: String = if (requestId != null) {
-            "; request-id: $requestId"
-        } else {
-            ""
-        }
-        return super.toString() + reqIdStr
+        return listOfNotNull(
+            requestId?.let { "Request-id: $it" },
+            super.toString()
+        ).joinToString(separator = "\n")
     }
 
-    internal companion object {
-        protected const val serialVersionUID = 1L
+    override fun equals(other: Any?): Boolean {
+        return when {
+            this === other -> true
+            other is StripeException -> typedEquals(other)
+            else -> false
+        }
+    }
+
+    override fun hashCode(): Int {
+        return Objects.hash(stripeError, requestId, statusCode, message)
+    }
+
+    private fun typedEquals(ex: StripeException): Boolean {
+        return stripeError == ex.stripeError &&
+            requestId == ex.requestId &&
+            statusCode == ex.statusCode &&
+            message == ex.message
     }
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.stripe.android.CustomerSession
+import com.stripe.android.PaymentSession
 import com.stripe.android.PaymentSessionConfig
 import com.stripe.android.PaymentSessionData
 import com.stripe.android.StripeError
@@ -20,16 +21,26 @@ internal class PaymentFlowViewModel(
     internal var paymentSessionData: PaymentSessionData,
     private val workScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) : ViewModel() {
+    internal var shippingMethods: List<ShippingMethod> = emptyList()
+    internal var isShippingInfoSubmitted: Boolean = false
+
+    internal var selectedShippingMethod: ShippingMethod? = null
+    internal var submittedShippingInfo: ShippingInformation? = null
+
+    internal var currentPage: Int = 0
 
     @JvmSynthetic
     internal fun saveCustomerShippingInformation(
         shippingInformation: ShippingInformation
     ): LiveData<SaveCustomerShippingInfoResult> {
+        submittedShippingInfo = shippingInformation
         val resultData = MutableLiveData<SaveCustomerShippingInfoResult>()
         customerSession.setCustomerShippingInformation(
-            shippingInformation,
-            object : CustomerSession.CustomerRetrievalListener {
+            shippingInformation = shippingInformation,
+            productUsage = PRODUCT_USAGE,
+            listener = object : CustomerSession.CustomerRetrievalListener {
                 override fun onCustomerRetrieved(customer: Customer) {
+                    isShippingInfoSubmitted = true
                     resultData.value = SaveCustomerShippingInfoResult.Success(customer)
                 }
 
@@ -38,6 +49,7 @@ internal class PaymentFlowViewModel(
                     errorMessage: String,
                     stripeError: StripeError?
                 ) {
+                    isShippingInfoSubmitted = false
                     resultData.value = SaveCustomerShippingInfoResult.Error(errorMessage)
                 }
             }
@@ -61,9 +73,11 @@ internal class PaymentFlowViewModel(
             if (isValid) {
                 val shippingMethods =
                     shippingMethodsFactory?.create(shippingInformation).orEmpty()
+                this@PaymentFlowViewModel.shippingMethods = shippingMethods
                 resultData.postValue(ValidateShippingInfoResult.Success(shippingMethods))
             } else {
                 val errorMessage = shippingInfoValidator.getErrorMessage(shippingInformation)
+                this@PaymentFlowViewModel.shippingMethods = emptyList()
                 resultData.postValue(ValidateShippingInfoResult.Error(errorMessage))
             }
         }
@@ -90,5 +104,15 @@ internal class PaymentFlowViewModel(
                 paymentSessionData
             ) as T
         }
+    }
+
+    internal companion object {
+        private const val SHIPPING_INFO_PRODUCT_TOKEN = "ShippingInfoScreen"
+
+        val PRODUCT_USAGE = setOf(
+            PaymentSession.PRODUCT_TOKEN,
+            PaymentFlowActivity.PRODUCT_TOKEN,
+            SHIPPING_INFO_PRODUCT_TOKEN
+        )
     }
 }

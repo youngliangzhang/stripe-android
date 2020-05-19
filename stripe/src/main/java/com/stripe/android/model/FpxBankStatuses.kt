@@ -1,30 +1,17 @@
 package com.stripe.android.model
 
-import org.json.JSONObject
+import com.stripe.android.view.FpxBank
+import kotlinx.android.parcel.Parcelize
 
-internal class FpxBankStatuses private constructor(
-    private val statuses: Map<String, Boolean>? = null
-) {
+@Parcelize
+internal data class FpxBankStatuses internal constructor(
+    private val statuses: Map<String, Boolean> = emptyMap()
+) : StripeModel {
     /**
      * Defaults to `true` if statuses aren't available.
      */
     @JvmSynthetic
-    internal fun isOnline(bankId: String): Boolean {
-        return statuses?.get(bankId) ?: true
-    }
-
-    internal companion object {
-        @JvmSynthetic
-        internal fun fromJson(json: JSONObject?): FpxBankStatuses {
-            return if (json == null) {
-                EMPTY
-            } else {
-                val statuses = StripeJsonUtils.optMap(json, "parsed_bank_status")
-                FpxBankStatuses(statuses as Map<String, Boolean>)
-            }
-        }
-
-        @get:JvmSynthetic
-        internal val EMPTY = FpxBankStatuses()
+    internal fun isOnline(bank: FpxBank): Boolean {
+        return statuses[bank.id] ?: true
     }
 }

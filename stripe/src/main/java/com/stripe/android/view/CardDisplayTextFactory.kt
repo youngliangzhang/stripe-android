@@ -9,19 +9,22 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.TypefaceSpan
 import androidx.annotation.ColorInt
 import com.stripe.android.R
+import com.stripe.android.model.CardBrand
 import com.stripe.android.model.PaymentMethod
 
 internal class CardDisplayTextFactory internal constructor(
     private val resources: Resources,
     private val themeConfig: ThemeConfig
 ) {
+    internal constructor(context: Context) : this(context.resources, ThemeConfig(context))
+
     @JvmSynthetic
     internal fun createStyled(
-        brand: String?,
+        brand: CardBrand,
         last4: String?,
         isSelected: Boolean
     ): SpannableString {
-        val brandText: String = resources.getString(BRAND_RESOURCE_MAP[brand] ?: R.string.unknown)
+        val brandText: String = brand.displayName
         val brandLength = brandText.length
         if (last4 == null) {
             val displayString = SpannableString(brandText)
@@ -105,7 +108,7 @@ internal class CardDisplayTextFactory internal constructor(
         )
     }
 
-    internal companion object {
+    private companion object {
         private val BRAND_RESOURCE_MAP = mapOf(
             PaymentMethod.Card.Brand.AMERICAN_EXPRESS to R.string.amex_short,
             PaymentMethod.Card.Brand.DINERS_CLUB to R.string.diners_club,
@@ -116,9 +119,5 @@ internal class CardDisplayTextFactory internal constructor(
             PaymentMethod.Card.Brand.UNIONPAY to R.string.unionpay,
             PaymentMethod.Card.Brand.UNKNOWN to R.string.unknown
         )
-
-        @JvmSynthetic
-        internal fun create(context: Context) =
-            CardDisplayTextFactory(context.resources, ThemeConfig(context))
     }
 }

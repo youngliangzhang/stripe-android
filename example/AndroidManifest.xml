@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <application
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/appName"
         android:name=".ExampleApplication"
         android:theme="@style/AppTheme"
@@ -44,23 +44,6 @@
             android:name=".activity.CreateCardSourceActivity">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
-
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-
-                <data
-                    android:host="async"
-                    android:scheme="stripe"/>
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-
-                <data
-                    android:host="sync"
-                    android:scheme="stripe"/>
             </intent-filter>
         </activity>
         <activity
@@ -97,18 +80,25 @@
 
         <activity
             android:name=".activity.PaymentAuthActivity" />
-
         <activity
             android:name=".activity.FragmentExamplesActivity" />
-
         <activity
-            android:name=".activity.CreateSepaDebitActivity" />
-
+            android:name=".activity.ConfirmSepaDebitActivity" />
         <activity
             android:name=".activity.FpxPaymentActivity" />
-
+        <activity
+            android:name=".activity.BecsDebitPaymentMethodActivity" />
+        <activity
+            android:name=".activity.BacsDebitPaymentMethodActivity" />
+        <activity
+            android:name=".activity.SofortPaymentMethodActivity" />
         <activity
             android:name=".activity.KlarnaSourceActivity" />
+        <activity
+            android:name=".activity.CardBrandsActivity" />
+
+        <activity android:name=".activity.SimplePaymentMethodConfirmationActivity" />
+        <activity android:name=".activity.ConnectExampleActivity" />
     </application>
 
 </manifest>

@@ -4,11 +4,12 @@ import android.content.Context
 import android.view.View
 import androidx.test.core.app.ApplicationProvider
 import com.google.android.material.textfield.TextInputLayout
+import com.nhaarman.mockitokotlin2.mock
 import com.stripe.android.ApiKeyFixtures
 import com.stripe.android.CustomerSession
 import com.stripe.android.EphemeralKeyProvider
 import com.stripe.android.PaymentConfiguration
-import com.stripe.android.PaymentSessionConfig
+import com.stripe.android.PaymentSessionData
 import com.stripe.android.PaymentSessionFixtures
 import com.stripe.android.R
 import com.stripe.android.model.Address
@@ -21,8 +22,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.runner.RunWith
-import org.mockito.Mock
-import org.mockito.MockitoAnnotations
 import org.robolectric.RobolectricTestRunner
 
 /**
@@ -46,8 +45,7 @@ class ShippingInfoWidgetTest {
     private lateinit var phoneEditText: StripeEditText
     private lateinit var countryAutoCompleteTextView: CountryAutoCompleteTextView
 
-    @Mock
-    private lateinit var ephemeralKeyProvider: EphemeralKeyProvider
+    private val ephemeralKeyProvider: EphemeralKeyProvider = mock()
 
     private val context: Context by lazy {
         ApplicationProvider.getApplicationContext<Context>()
@@ -59,19 +57,20 @@ class ShippingInfoWidgetTest {
 
     @BeforeTest
     fun setup() {
-        MockitoAnnotations.initMocks(this)
         Locale.setDefault(Locale.US)
 
         PaymentConfiguration.init(context, ApiKeyFixtures.FAKE_PUBLISHABLE_KEY)
         CustomerSession.initCustomerSession(context, ephemeralKeyProvider)
 
-        val args = PaymentFlowActivityStarter.Args.Builder()
-            .setPaymentSessionConfig(PaymentSessionConfig.Builder()
-                .build())
-            .setPaymentSessionData(PaymentSessionFixtures.PAYMENT_SESSION_DATA)
-            .build()
+        val config = PaymentSessionFixtures.CONFIG.copy(
+            prepopulatedShippingInfo = null,
+            allowedShippingCountryCodes = emptySet()
+        )
         activityScenarioFactory.create<PaymentFlowActivity>(
-            args
+            PaymentFlowActivityStarter.Args(
+                paymentSessionConfig = config,
+                paymentSessionData = PaymentSessionData(config)
+            )
         ).use { activityScenario ->
             activityScenario.onActivity {
                 shippingInfoWidget = it.findViewById(R.id.shipping_info_widget)
@@ -246,14 +245,28 @@ class ShippingInfoWidgetTest {
     @Test
     fun populateShippingInfo_whenShippingInfoProvided_populates() {
         shippingInfoWidget.populateShippingInfo(SHIPPING_INFO)
-        assertEquals(stateEditText.text.toString(), "CA")
-        assertEquals(cityEditText.text.toString(), "San Francisco")
-        assertEquals(addressLine1EditText.text.toString(), "185 Berry St")
-        assertEquals(addressLine2EditText.text.toString(), "10th Floor")
-        assertEquals(phoneEditText.text.toString(), "(123) 456 - 7890")
-        assertEquals(postalEditText.text.toString(), "12345")
-        assertEquals(nameEditText.text.toString(), "Fake Name")
+        assertEquals(stateEditText.fieldText, "CA")
+        assertEquals(cityEditText.fieldText, "San Francisco")
+        assertEquals(addressLine1EditText.fieldText, "185 Berry St")
+        assertEquals(addressLine2EditText.fieldText, "10th Floor")
+        assertEquals(phoneEditText.fieldText, "(123) 456 - 7890")
+        assertEquals(postalEditText.fieldText, "12345")
+        assertEquals(nameEditText.fieldText, "Fake Name")
         assertEquals(countryAutoCompleteTextView.selectedCountry?.code, "US")
+    }
+
+    @Test
+    fun getSelectedShippingCountry_whenShippingInfoProvided_returnsExpected() {
+        shippingInfoWidget.setAllowedCountryCodes(setOf("US", "CA"))
+        shippingInfoWidget.populateShippingInfo(SHIPPING_INFO_CA)
+        assertEquals("Ontario", stateEditText.fieldText)
+        assertEquals("Ontario", cityEditText.fieldText)
+        assertEquals("185 Berry St", addressLine1EditText.fieldText)
+        assertEquals("10th Floor", addressLine2EditText.fieldText)
+        assertEquals("416-759-0260", phoneEditText.fieldText)
+        assertEquals("M4B1B5", postalEditText.fieldText)
+        assertEquals("Fake Name", nameEditText.fieldText)
+        assertEquals("CA", countryAutoCompleteTextView.selectedCountry?.code)
     }
 
     private companion object {
@@ -270,6 +283,19 @@ class ShippingInfoWidgetTest {
                 .build(),
             "Fake Name",
             "(123) 456 - 7890"
+        )
+
+        private val SHIPPING_INFO_CA = ShippingInformation(
+            Address.Builder()
+                .setCity("Ontario")
+                .setState("Ontario")
+                .setCountry("CA")
+                .setLine1("185 Berry St")
+                .setLine2("10th Floor")
+                .setPostalCode("M4B1B5")
+                .build(),
+            "Fake Name",
+            "416-759-0260"
         )
     }
 }
