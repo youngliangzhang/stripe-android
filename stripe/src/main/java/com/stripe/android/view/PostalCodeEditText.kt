@@ -38,7 +38,7 @@ class PostalCodeEditText @JvmOverloads constructor(
                 }
             } else {
                 fieldText.takeIf {
-                    it.length == MAX_LENGTH_GLOBAL
+                    it.length in MAX_LENGTH_US..MAX_LENGTH_GLOBAL
                 }
             }
         }
