@@ -30,6 +30,9 @@ class PostalCodeEditText @JvmOverloads constructor(
         }
     }
 
+    /**
+     * we need to support US card in any locale
+     */
     internal val postalCode: String?
         get() {
             return when (config) {
@@ -45,7 +48,7 @@ class PostalCodeEditText @JvmOverloads constructor(
                 }
                 Config.AUSTRALIA -> {
                     fieldText.takeIf {
-                        it.length == MAX_LENGTH_AUSTRALIA
+                        it.length in MAX_LENGTH_AUSTRALIA..MAX_LENGTH_US
                     }
                 }
                 else -> {
@@ -101,7 +104,7 @@ class PostalCodeEditText @JvmOverloads constructor(
                 inputType = InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS
             }
             Config.AUSTRALIA -> {
-                filters = arrayOf(InputFilter.LengthFilter(MAX_LENGTH_AUSTRALIA))
+                filters = arrayOf(InputFilter.LengthFilter(kotlin.math.max(MAX_LENGTH_AUSTRALIA, MAX_LENGTH_US)))
                 keyListener = DigitsKeyListener.getInstance(false, true)
                 inputType = InputType.TYPE_CLASS_NUMBER
             }
