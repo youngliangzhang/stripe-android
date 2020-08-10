@@ -92,7 +92,7 @@ class PostalCodeEditText @JvmOverloads constructor(
      */
     private fun configureForGlobal() {
         updateHint(R.string.address_label_postal_code)
-        when(config) {
+        when (config) {
             Config.Global -> {
                 filters = arrayOf(InputFilter.LengthFilter(MAX_LENGTH_GLOBAL))
                 keyListener = TextKeyListener.getInstance()
