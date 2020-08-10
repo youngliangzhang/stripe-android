@@ -1,5 +1,202 @@
 # Migration Guide
 
+## Migrating from versions < 15.0.0
+- The SDK now targets JVM 1.8
+- The SDK now requires Android 5.0+ (API level 21+)
+- Changes to `PaymentIntent`
+    - `PaymentIntent#captureMethod` is now an enum, `PaymentIntent.CaptureMethod`
+        ```kotlin
+        // before
+        if (paymentIntent.captureMethod == "automatic") {
+
+        } else if (paymentIntent.captureMethod == "manual") {
+
+        }
+
+        // after
+        when (paymentIntent.captureMethod) {
+            PaymentIntent.CaptureMethod.Automatic -> {}
+            PaymentIntent.CaptureMethod.Manual -> {}
+        }
+        ```
+    - `PaymentIntent#confirmationMethod` is now an enum, `PaymentIntent.ConfirmationMethod`
+        ```kotlin
+        // before
+        if (paymentIntent.confirmationMethod == "automatic") {
+
+        } else if (paymentIntent.confirmationMethod == "manual") {
+
+        }
+
+        // after
+        when (paymentIntent.confirmationMethod) {
+            PaymentIntent.ConfirmationMethod.Automatic -> {}
+            PaymentIntent.ConfirmationMethod.Manual -> {}
+        }
+        ```
+- Changes to `PaymentMethod`
+    - `PaymentMethod.Card#brand` is now a `CardBrand`
+        ```kotlin
+        // before
+        when (paymentMethod.card?.brand) {
+            "visa" -> {}
+            "mastercard" -> {}
+            else -> {}
+        }
+
+        // after
+        when (paymentMethod.card?.brand) {
+            CardBrand.Visa -> {}
+            CardBrand.MasterCard -> {}
+            else -> {}
+        }
+        ```
+- Changes to `Token`
+    - `Token.TokenType` is renamed to `Token.Type` and is now an enum
+        ```kotlin
+        // before
+        when (token.type) {
+            Token.TokenType.CARD -> {}
+            Token.TokenType.BANK_ACCOUNT -> {}
+            else -> {}
+        }
+
+        // after
+        when (token.type) {
+            Token.Type.Card -> {}
+            Token.Type.BankAccount -> {}
+            else -> {}
+        }
+        ```
+- Changes to `PaymentSession`
+    - Remove `PaymentSession#ActivityPaymentSessionListener`
+- Changes to `CustomerSession`
+    - `CustomerSession`'s constructor no longer takes a `stripeAccountId`;
+      instead, instantiate `PaymentConfiguration` with a `stripeAccountId`
+        ```kotlin
+        // before
+        PaymentConfiguration.init(
+            context,
+            "pk_test"
+        )
+        CustomerSession.initCustomerSession(
+            context
+            ephemeralKeyProvider,
+            "acct_1234"
+        )
+
+        // after
+        PaymentConfiguration.init(
+            context,
+            "pk_test",
+            "acct_1234"
+        )
+        CustomerSession.initCustomerSession(
+            context
+            ephemeralKeyProvider
+        )
+        ```
+    - Remove `CustomerSession#ActivityCustomerRetrievalListener`, `CustomerSession#ActivityPaymentMethodRetrievalListener`,
+      `CustomerSession#ActivityPaymentMethodsRetrievalListener`, and `CustomerSession#ActivitySourceRetrievalListener`
+- Changes to `AddPaymentMethodActivity`
+    - When `PaymentConfiguration` is instantiated with a `stripeAccountId`, it will be used in `AddPaymentMethodActivity`
+      when creating a payment method
+        ```kotlin
+        PaymentConfiguration.init(context, "pk_test", "acct_1234")
+        ```
+    - `AddPaymentMethodActivity.Result` is now a sealed class with `Success`, `Failure`, and `Canceled` subclasses
+        ```kotlin
+        // before
+        val result = AddPaymentMethodActivityStarter.Result.fromIntent(
+            intent
+        )
+        when {
+            result != null -> result.paymentMethod
+            else -> {
+                // error happened or customer canceled
+            }
+        }
+    
+        // after
+        val result = AddPaymentMethodActivityStarter.Result.fromIntent(
+            intent
+        )
+        when (result) {
+            is AddPaymentMethodActivityStarter.Result.Success -> {
+                result.paymentMethod
+            }
+            is AddPaymentMethodActivityStarter.Result.Failure -> {
+                result.exception
+            }
+            is AddPaymentMethodActivityStarter.Result.Canceled -> {
+                // customer canceled
+            }
+        }
+        ```
+- Changes to `ShippingInfoWidget`
+    - `setOptionalFields()` is now `optionalFields`
+    - `setHiddenFields()` is now `hiddenFields`
+    - `CustomizableShippingField` is now an enum
+- Changes to `Source`
+    - `Source.SourceFlow` has been renamed to `Source.Flow` and is now an enum
+    - `Source.SourceStatus` has been renamed to `Source.Status` and is now an enum
+    - `Source.Usage` is now an enum
+    - `SourceCodeVerification` has been moved to `Source.CodeVerification`
+    - `SourceOwner` has been moved to `Source.Owner`
+    - `SourceReceiver` has been moved to `Source.Receiver`
+    - `SourceRedirect` has been moved to `Source.Redirect`
+- Changes to `CustomerSource`
+    - `CustomerSource#tokenizationMethod` is now a `TokenizationMethod?`
+- Changes to `SourceTypeModel.Card`
+    - `SourceTypeModel.Card.ThreeDSecureStatus` is now an enum
+- Changes to `BankAccount`
+    - public constructors have been removed
+    - `BankAccount#accountNumber` has been removed
+    - `Stripe#createBankAccountToken()` no longer accepts a `BankAccount` instance;
+      instead, use `BankAccountTokenParams`
+    - `Stripe#createBankAccountTokenSynchronous()` no longer accepts a `BankAccount` instance;
+      instead, use `BankAccountTokenParams`
+- Changes to `AccountParams`
+    - Remove `AccountParams.create()` that takes a raw map; instead, use `create()` method that takes a
+      `AccountParams.BusinessTypeParams.Individual` or `AccountParams.BusinessTypeParams.Company`
+- Changes to `CardInputListener`
+    - `FocusField` is now an enum
+
+## Migrating from versions < 14.5.0
+- Changes to `StripeIntent`
+    - `redirectData` is now deprecated.
+
+        If a `PaymentIntent` or `SetupIntent` requires a redirect to authenticate, this information will be in `nextActionData`.
+        However, as before, this action will be handled by the SDK in `Stripe.confirmPayment`/`Stripe.confirmSetupIntent`.
+
+        ```kotlin
+        // before
+        if (intent.redirectData != null) {
+            // requires redirect
+        }
+
+        // after
+        when (intent.nextActionData) {
+            is StripeIntent.RedirectData.RedirectToUrl -> // requires redirect
+        }
+        ```
+    - `stripeSdkData` is now deprecated.
+
+        If a `PaymentIntent` or `SetupIntent` requires 3DS1 or 3DS2 authentication, this information will be in `nextActionData`.
+        However, as before, this action will be handled by the SDK in `Stripe.confirmPayment`/`Stripe.confirmSetupIntent`.
+
+        ```kotlin
+        // before
+        if (intent.stripeSdkData != null) {
+            // requires 3D Secure auth
+        }
+
+        // after
+        when (intent.nextActionData) {
+            is StripeIntent.RedirectData.SdkData -> // requires 3D Secure auth
+        }
+        ```
+
 ## Migrating from versions < 14.0.0
 - Changes to Stripe Error localization
     - All [Stripe Error messages](https://stripe.com/docs/api/errors#errors-message) are now localized

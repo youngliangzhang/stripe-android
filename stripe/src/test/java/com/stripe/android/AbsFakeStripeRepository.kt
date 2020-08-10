@@ -1,6 +1,8 @@
 package com.stripe.android
 
 import com.stripe.android.exception.APIException
+import com.stripe.android.model.CardMetadata
+import com.stripe.android.model.Complete3ds2Result
 import com.stripe.android.model.ConfirmPaymentIntentParams
 import com.stripe.android.model.ConfirmSetupIntentParams
 import com.stripe.android.model.Customer
@@ -13,12 +15,14 @@ import com.stripe.android.model.SetupIntent
 import com.stripe.android.model.ShippingInformation
 import com.stripe.android.model.Source
 import com.stripe.android.model.SourceParams
+import com.stripe.android.model.Stripe3ds2AuthParams
 import com.stripe.android.model.Stripe3ds2AuthResult
 import com.stripe.android.model.StripeFile
 import com.stripe.android.model.StripeFileParams
 import com.stripe.android.model.StripeIntent
 import com.stripe.android.model.Token
 import com.stripe.android.model.TokenParams
+import org.json.JSONObject
 
 internal abstract class AbsFakeStripeRepository : StripeRepository {
 
@@ -225,9 +229,12 @@ internal abstract class AbsFakeStripeRepository : StripeRepository {
     ) {
     }
 
-    override fun getFpxBankStatus(options: ApiRequest.Options): FpxBankStatuses {
-        return FpxBankStatuses()
-    }
+    override suspend fun getFpxBankStatus(
+        options: ApiRequest.Options
+    ) = FpxBankStatuses()
+
+    override suspend fun getCardMetadata(binPrefix: String, options: ApiRequest.Options) =
+        CardMetadata("424242", emptyList())
 
     override fun start3ds2Auth(
         authParams: Stripe3ds2AuthParams,
@@ -240,7 +247,7 @@ internal abstract class AbsFakeStripeRepository : StripeRepository {
     override fun complete3ds2Auth(
         sourceId: String,
         requestOptions: ApiRequest.Options,
-        callback: ApiResultCallback<Boolean>
+        callback: ApiResultCallback<Complete3ds2Result>
     ) {
     }
 
@@ -249,5 +256,9 @@ internal abstract class AbsFakeStripeRepository : StripeRepository {
         requestOptions: ApiRequest.Options
     ): StripeFile {
         return StripeFile()
+    }
+
+    override fun retrieveObject(url: String, requestOptions: ApiRequest.Options): JSONObject {
+        return JSONObject()
     }
 }

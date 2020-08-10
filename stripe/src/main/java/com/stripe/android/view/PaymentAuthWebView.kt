@@ -6,7 +6,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.util.AttributeSet
@@ -31,7 +30,7 @@ internal class PaymentAuthWebView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
-) : WebView(createContext(context), attrs, defStyleAttr) {
+) : WebView(context, attrs, defStyleAttr) {
     private var webViewClient: PaymentAuthWebViewClient? = null
 
     init {
@@ -45,8 +44,14 @@ internal class PaymentAuthWebView @JvmOverloads constructor(
         clientSecret: String,
         returnUrl: String? = null
     ) {
-        val webViewClient = PaymentAuthWebViewClient(activity, activity.packageManager, logger,
-            progressBar, clientSecret, returnUrl)
+        val webViewClient = PaymentAuthWebViewClient(
+            activity,
+            activity.packageManager,
+            logger,
+            progressBar,
+            clientSecret,
+            returnUrl
+        )
         setWebViewClient(webViewClient)
         this.webViewClient = webViewClient
 
@@ -96,27 +101,11 @@ internal class PaymentAuthWebView @JvmOverloads constructor(
         settings.domStorageEnabled = true
     }
 
-    internal fun loadBlank() {
+    private fun loadBlank() {
         webViewClient?.let {
             it.hasLoadedBlank = true
         }
         loadUrl(BLANK_PAGE)
-    }
-
-    private companion object {
-        /**
-         * Fix for crash in API 21 and 22
-         *
-         * See <a href="https://stackoverflow.com/q/41025200/">https://stackoverflow.com/q/41025200/</a>
-         * for more context.
-         */
-        private fun createContext(context: Context): Context {
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                context.createConfigurationContext(Configuration())
-            } else {
-                context
-            }
-        }
     }
 
     internal class PaymentAuthWebViewClient(
@@ -128,7 +117,7 @@ internal class PaymentAuthWebView @JvmOverloads constructor(
         returnUrl: String?
     ) : WebViewClient() {
         // user-specified return URL
-        private val userReturnUri: Uri? = if (returnUrl != null) Uri.parse(returnUrl) else null
+        private val userReturnUri: Uri? = returnUrl?.let { Uri.parse(it) }
 
         var completionUrlParam: String? = null
             private set
@@ -155,12 +144,12 @@ internal class PaymentAuthWebView @JvmOverloads constructor(
             progressBar.visibility = View.GONE
         }
 
-        private fun isAuthenticateUrl(url: String) = isWhiteListedUrl(url, AUTHENTICATE_URLS)
+        private fun isAuthenticateUrl(url: String) = isAllowedUrl(url, AUTHENTICATE_URLS)
 
-        private fun isCompletionUrl(url: String) = isWhiteListedUrl(url, COMPLETION_URLS)
+        private fun isCompletionUrl(url: String) = isAllowedUrl(url, COMPLETION_URLS)
 
-        private fun isWhiteListedUrl(url: String, whitelistedUrls: Set<String>): Boolean {
-            for (completionUrl in whitelistedUrls) {
+        private fun isAllowedUrl(url: String, allowedUrls: Set<String>): Boolean {
+            for (completionUrl in allowedUrls) {
                 if (url.startsWith(completionUrl)) {
                     return true
                 }
@@ -204,8 +193,12 @@ internal class PaymentAuthWebView @JvmOverloads constructor(
             logger.debug("PaymentAuthWebViewClient#openIntent()")
             if (intent.resolveActivity(packageManager) != null) {
                 activity.startActivity(intent)
-            } else {
-                // complete auth if the deep-link can't be opened
+            } else if (intent.scheme != "alipays") {
+                // complete auth if the deep-link can't be opened unless it is Alipay.
+                // The Alipay web view tries to open the Alipay app as soon as it is opened
+                // irrespective of whether or not the app is installed.
+                // If this intent fails to resolve, we should still let the user
+                // continue on the mobile site.
                 onAuthCompleted()
             }
         }

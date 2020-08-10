@@ -22,6 +22,12 @@ internal interface PaymentController {
         requestOptions: ApiRequest.Options
     )
 
+    fun startConfirm(
+        confirmStripeIntentParams: ConfirmStripeIntentParams,
+        requestOptions: ApiRequest.Options,
+        callback: ApiResultCallback<StripeIntent>
+    )
+
     fun startAuth(
         host: AuthActivityStarter.Host,
         clientSecret: String,
@@ -87,6 +93,13 @@ internal interface PaymentController {
         host: AuthActivityStarter.Host,
         stripeIntent: StripeIntent,
         requestOptions: ApiRequest.Options
+    )
+
+    fun authenticateAlipay(
+        intent: StripeIntent,
+        stripeAccountId: String?,
+        authenticator: AlipayAuthenticator,
+        callback: ApiResultCallback<PaymentIntentResult>
     )
 
     /**

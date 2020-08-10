@@ -66,7 +66,8 @@ class PaymentMethodsActivity : AppCompatActivity() {
             addableTypes = args.paymentMethodTypes,
             initiallySelectedPaymentMethodId = viewModel.selectedPaymentMethodId,
             shouldShowGooglePay = args.shouldShowGooglePay,
-            useGooglePay = args.useGooglePay
+            useGooglePay = args.useGooglePay,
+            canDeletePaymentMethods = args.canDeletePaymentMethods
         )
     }
 
@@ -131,12 +132,15 @@ class PaymentMethodsActivity : AppCompatActivity() {
 
         viewBinding.recycler.adapter = adapter
         viewBinding.recycler.paymentMethodSelectedCallback = { finishWithResult(it) }
-        viewBinding.recycler.attachItemTouchHelper(
-            PaymentMethodSwipeCallback(
-                this, adapter,
-                SwipeToDeleteCallbackListener(deletePaymentMethodDialogFactory)
+
+        if (args.canDeletePaymentMethods) {
+            viewBinding.recycler.attachItemTouchHelper(
+                PaymentMethodSwipeCallback(
+                    this, adapter,
+                    SwipeToDeleteCallbackListener(deletePaymentMethodDialogFactory)
+                )
             )
-        )
+        }
     }
 
     public override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -156,7 +160,17 @@ class PaymentMethodsActivity : AppCompatActivity() {
         data?.let {
             val result =
                 AddPaymentMethodActivityStarter.Result.fromIntent(data)
-            result?.paymentMethod?.let { onAddedPaymentMethod(it) }
+            when (result) {
+                is AddPaymentMethodActivityStarter.Result.Success -> {
+                    onAddedPaymentMethod(result.paymentMethod)
+                }
+                is AddPaymentMethodActivityStarter.Result.Failure -> {
+                    // TODO(mshafrir-stripe): notify user that payment method can not be added at this time
+                }
+                else -> {
+                    // no-op
+                }
+            }
         } ?: fetchCustomerPaymentMethods()
     }
 

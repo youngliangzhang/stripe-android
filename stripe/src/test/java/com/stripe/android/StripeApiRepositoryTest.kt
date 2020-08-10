@@ -16,8 +16,8 @@ import com.nhaarman.mockitokotlin2.whenever
 import com.stripe.android.exception.APIConnectionException
 import com.stripe.android.exception.InvalidRequestException
 import com.stripe.android.model.BankAccountTokenParamsFixtures
-import com.stripe.android.model.Card
-import com.stripe.android.model.CardFixtures
+import com.stripe.android.model.CardParams
+import com.stripe.android.model.CardParamsFixtures
 import com.stripe.android.model.ConfirmPaymentIntentParams
 import com.stripe.android.model.ListPaymentMethodsParams
 import com.stripe.android.model.PaymentIntentFixtures
@@ -27,6 +27,7 @@ import com.stripe.android.model.PaymentMethodCreateParamsFixtures
 import com.stripe.android.model.PaymentMethodFixtures
 import com.stripe.android.model.SourceFixtures
 import com.stripe.android.model.SourceParams
+import com.stripe.android.model.Stripe3ds2AuthParams
 import com.stripe.android.model.StripeFileFixtures
 import com.stripe.android.model.StripeFileParams
 import com.stripe.android.model.StripeFilePurpose
@@ -44,6 +45,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestCoroutineDispatcher
+import kotlinx.coroutines.test.runBlockingTest
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
@@ -51,10 +55,16 @@ import org.robolectric.RobolectricTestRunner
  * Test class for [StripeApiRepository].
  */
 @RunWith(RobolectricTestRunner::class)
+@ExperimentalCoroutinesApi
 class StripeApiRepositoryTest {
+    private val testDispatcher = TestCoroutineDispatcher()
 
     private val context: Context = ApplicationProvider.getApplicationContext()
-    private val stripeApiRepository = StripeApiRepository(context, DEFAULT_OPTIONS.apiKey)
+    private val stripeApiRepository = StripeApiRepository(
+        context,
+        DEFAULT_OPTIONS.apiKey,
+        workDispatcher = testDispatcher
+    )
     private val fileFactory = FileFactory(context)
 
     private val stripeApiRequestExecutor: ApiRequestExecutor = mock()
@@ -68,10 +78,7 @@ class StripeApiRepositoryTest {
     @BeforeTest
     fun before() {
         whenever(fingerprintDataRepository.get()).thenReturn(
-            FingerprintData(
-                guid = UUID.randomUUID().toString(),
-                timestamp = Calendar.getInstance().timeInMillis
-            )
+            FingerprintDataFixtures.create(Calendar.getInstance().timeInMillis)
         )
 
         whenever(stripeApiRequestExecutor.execute(any<FileUploadRequest>()))
@@ -180,7 +187,7 @@ class StripeApiRepositoryTest {
     @Test
     fun createSource_shouldLogSourceCreation_andReturnSource() {
         val source = stripeApiRepository.createSource(
-            SourceParams.createCardParams(CARD),
+            SourceParams.createCardParams(CARD_PARAMS),
             DEFAULT_OPTIONS
         )
 
@@ -198,7 +205,7 @@ class StripeApiRepositoryTest {
         whenever(stripeApiRequestExecutor.execute(any<ApiRequest>()))
             .thenReturn(stripeResponse)
         create().createSource(
-            SourceParams.createCardParams(CardFixtures.CARD_WITH_ATTRIBUTION),
+            SourceParams.createCardParams(CardParamsFixtures.WITH_ATTRIBUTION),
             DEFAULT_OPTIONS
         )
 
@@ -235,7 +242,7 @@ class StripeApiRepositoryTest {
     @Test
     fun createSource_withConnectAccount_keepsHeaderInAccount() {
         val connectAccountId = "acct_1Acj2PBUgO3KuWzz"
-        val source = stripeApiRepository.createSource(SourceParams.createCardParams(CARD),
+        val source = stripeApiRepository.createSource(SourceParams.createCardParams(CARD_PARAMS),
             ApiRequest.Options(ApiKeyFixtures.CONNECTED_ACCOUNT_PUBLISHABLE_KEY, connectAccountId))
 
         // Check that we get a source back; we don't care about its fields for this test.
@@ -338,7 +345,7 @@ class StripeApiRepositoryTest {
                     ApiKeyFixtures.CONNECTED_ACCOUNT_PUBLISHABLE_KEY,
                     connectAccountId
                 ),
-                SourceParams.createCardParams(CARD).toParamMap()
+                SourceParams.createCardParams(CARD_PARAMS).toParamMap()
             )
         )
         assertNotNull(response)
@@ -386,7 +393,7 @@ class StripeApiRepositoryTest {
         verifyFingerprintAndAnalyticsRequests(AnalyticsEvent.PaymentIntentConfirm)
 
         val analyticsRequest = analyticsRequestArgumentCaptor.firstValue
-        assertEquals(PaymentMethod.Type.Card.code, analyticsRequest.params?.get("source_type"))
+        assertEquals(PaymentMethod.Type.Card.code, analyticsRequest.params.get("source_type"))
     }
 
     @Ignore("requires a secret key")
@@ -427,7 +434,7 @@ class StripeApiRepositoryTest {
             fingerprintDataRepository = fingerprintDataRepository
         )
         val source = stripeApiRepository.createSource(
-            SourceParams.createCardParams(CARD),
+            SourceParams.createCardParams(CARD_PARAMS),
             DEFAULT_OPTIONS
         )
         assertNotNull(source)
@@ -664,11 +671,43 @@ class StripeApiRepositoryTest {
     }
 
     @Test
-    fun getFpxBankStatus_withFpxKey() {
+    fun getFpxBankStatus_withFpxKey() = testDispatcher.runBlockingTest {
         val fpxBankStatuses = stripeApiRepository.getFpxBankStatus(
             ApiRequest.Options(ApiKeyFixtures.FPX_PUBLISHABLE_KEY)
         )
-        assertTrue(fpxBankStatuses.isOnline(FpxBank.Hsbc))
+        assertThat(
+            setOf(FpxBank.Hsbc, FpxBank.Bsn).any {
+                fpxBankStatuses.isOnline(it)
+            }
+        ).isTrue()
+    }
+
+    @Test
+    fun getFpxBankStatus_withFpxKey_ignoresStripeAccountId() = testDispatcher.runBlockingTest {
+        val fpxBankStatuses = stripeApiRepository.getFpxBankStatus(
+            ApiRequest.Options(
+                apiKey = ApiKeyFixtures.FPX_PUBLISHABLE_KEY,
+                stripeAccount = "acct_1234"
+            )
+        )
+        assertThat(
+            setOf(FpxBank.Hsbc, FpxBank.Bsn).any {
+                fpxBankStatuses.isOnline(it)
+            }
+        ).isTrue()
+    }
+
+    @Test
+    fun `getCardMetadata with valid bin prefix should succeed`() {
+        testDispatcher.runBlockingTest {
+            val cardMetadata =
+                stripeApiRepository.getCardMetadata(
+                    "424242",
+                    ApiRequest.Options(ApiKeyFixtures.DEFAULT_PUBLISHABLE_KEY)
+                )
+            assertThat(cardMetadata.binPrefix).isEqualTo("424242")
+            assertThat(cardMetadata.accountRanges).isNotEmpty()
+        }
     }
 
     @Test
@@ -695,7 +734,7 @@ class StripeApiRepositoryTest {
 
         assertFailsWith<APIConnectionException> {
             create().createSource(
-                SourceParams.createCardParams(CARD),
+                SourceParams.createCardParams(CARD_PARAMS),
                 DEFAULT_OPTIONS
             )
         }
@@ -737,7 +776,7 @@ class StripeApiRepositoryTest {
             )
         }
         assertEquals(
-            "No such setupintent: seti_1CkiBMLENEVhOs7YMtUehLau",
+            "No such setupintent: 'seti_1CkiBMLENEVhOs7YMtUehLau'",
             ex.stripeError?.message
         )
     }
@@ -759,7 +798,7 @@ class StripeApiRepositoryTest {
             )
         }
         assertEquals(
-            "そのような setupintent はありません : seti_1CkiBMLENEVhOs7YMtUehLau ",
+            "そのような setupintent はありません : 'seti_1CkiBMLENEVhOs7YMtUehLau' ",
             ex.stripeError?.message
         )
     }
@@ -773,7 +812,7 @@ class StripeApiRepositoryTest {
         )
         whenever(stripeApiRequestExecutor.execute(any<ApiRequest>())).thenReturn(stripeResponse)
         create().createToken(
-            CardFixtures.CARD_WITH_ATTRIBUTION,
+            CardParamsFixtures.WITH_ATTRIBUTION,
             DEFAULT_OPTIONS
         )
 
@@ -890,18 +929,14 @@ class StripeApiRepositoryTest {
             stripeApiRequestExecutor = stripeApiRequestExecutor,
             analyticsRequestExecutor = analyticsRequestExecutor,
             fingerprintDataRepository = fingerprintDataRepository,
-            fingerprintParamsUtils = FingerprintParamsUtils(
-                ApiFingerprintParamsFactory(
-                    store = FakeClientFingerprintDataStore()
-                )
-            )
+            fingerprintParamsUtils = FingerprintParamsUtils()
         )
     }
 
     private companion object {
         private const val STRIPE_ACCOUNT_RESPONSE_HEADER = "Stripe-Account"
-        private val CARD =
-            Card.create("4242424242424242", 1, 2050, "123")
+        private val CARD_PARAMS =
+            CardParams("4242424242424242", 1, 2050, "123")
 
         private val DEFAULT_OPTIONS = ApiRequest.Options(ApiKeyFixtures.DEFAULT_PUBLISHABLE_KEY)
 

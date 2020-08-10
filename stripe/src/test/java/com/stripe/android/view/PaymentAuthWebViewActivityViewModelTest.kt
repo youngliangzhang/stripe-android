@@ -1,6 +1,5 @@
 package com.stripe.android.view
 
-import android.content.Intent
 import com.google.common.truth.Truth.assertThat
 import com.stripe.android.PaymentAuthWebViewStarter
 import com.stripe.android.PaymentController
@@ -14,22 +13,40 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class PaymentAuthWebViewActivityViewModelTest {
     @Test
-    fun cancelIntentSource() {
+    fun cancellationResult() {
         val viewModel = PaymentAuthWebViewActivityViewModel(
             PaymentAuthWebViewStarter.Args(
                 clientSecret = "client_secret",
-                url = "https://example.com"
+                url = "https://example.com",
+                shouldCancelSource = true
             )
         )
 
-        var intent: Intent? = null
-        viewModel.cancelIntentSource().observeForever {
-            intent = it
-        }
-
+        val intent = viewModel.cancellationResult
+        val resultIntent = PaymentController.Result.fromIntent(requireNotNull(intent))
         assertThat(
-            PaymentController.Result.fromIntent(requireNotNull(intent))?.flowOutcome
+            resultIntent?.flowOutcome
         ).isEqualTo(StripeIntentResult.Outcome.CANCELED)
+        assertThat(resultIntent?.shouldCancelSource).isTrue()
+    }
+
+    @Test
+    fun `cancellationResult should set correct outcome when user nav is allowed`() {
+        val viewModel = PaymentAuthWebViewActivityViewModel(
+            PaymentAuthWebViewStarter.Args(
+                clientSecret = "client_secret",
+                url = "https://example.com",
+                shouldCancelSource = true,
+                shouldCancelIntentOnUserNavigation = false
+            )
+        )
+
+        val intent = viewModel.cancellationResult
+        val resultIntent = PaymentController.Result.fromIntent(requireNotNull(intent))
+        assertThat(
+            resultIntent?.flowOutcome
+        ).isEqualTo(StripeIntentResult.Outcome.SUCCEEDED)
+        assertThat(resultIntent?.shouldCancelSource).isTrue()
     }
 
     @Test

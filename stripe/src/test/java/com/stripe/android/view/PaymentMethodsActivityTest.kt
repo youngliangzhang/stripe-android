@@ -38,9 +38,7 @@ class PaymentMethodsActivityTest {
     private val listenerArgumentCaptor: KArgumentCaptor<CustomerSession.PaymentMethodsRetrievalListener> = argumentCaptor()
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
-    private val activityScenarioFactory: ActivityScenarioFactory by lazy {
-        ActivityScenarioFactory(context)
-    }
+    private val activityScenarioFactory = ActivityScenarioFactory(context)
 
     @BeforeTest
     fun setup() {
@@ -171,7 +169,10 @@ class PaymentMethodsActivityTest {
                 assertNotNull(paymentMethod)
 
                 val resultIntent = Intent()
-                    .putExtras(AddPaymentMethodActivityStarter.Result(paymentMethod).toBundle())
+                    .putExtras(
+                        AddPaymentMethodActivityStarter.Result.Success(paymentMethod)
+                            .toBundle()
+                    )
                 activity.onActivityResult(
                     AddPaymentMethodActivityStarter.REQUEST_CODE, RESULT_OK, resultIntent
                 )

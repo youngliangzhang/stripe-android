@@ -1,10 +1,11 @@
 package com.stripe.android
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
-import androidx.lifecycle.Observer
 import java.util.Calendar
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 internal interface FingerprintDataRepository {
     fun refresh()
@@ -12,11 +13,11 @@ internal interface FingerprintDataRepository {
     fun save(fingerprintData: FingerprintData)
 
     class Default(
-        private val store: FingerprintDataStore,
+        private val localStore: FingerprintDataStore,
         private val fingerprintRequestFactory: FingerprintRequestFactory,
         private val fingerprintRequestExecutor: FingerprintRequestExecutor =
             FingerprintRequestExecutor.Default(),
-        private val handler: Handler = Handler(Looper.getMainLooper())
+        dispatcher: CoroutineDispatcher = Dispatchers.IO
     ) : FingerprintDataRepository {
         private var cachedFingerprintData: FingerprintData? = null
 
@@ -24,37 +25,36 @@ internal interface FingerprintDataRepository {
             Calendar.getInstance().timeInMillis
         }
 
+        private val scope = CoroutineScope(dispatcher)
+
         constructor(
             context: Context
         ) : this(
-            store = FingerprintDataStore.Default(context),
+            localStore = FingerprintDataStore.Default(context),
             fingerprintRequestFactory = FingerprintRequestFactory(context)
         )
 
         override fun refresh() {
             if (Stripe.advancedFraudSignalsEnabled) {
-                handler.post {
-                    val liveData = store.get()
-                    // LiveData observation must occur on the main thread
-                    liveData.observeForever(object : Observer<FingerprintData> {
-                        override fun onChanged(localFingerprintData: FingerprintData) {
-                            if (localFingerprintData.isExpired(timestampSupplier())) {
-                                fingerprintRequestExecutor.execute(
-                                    request = fingerprintRequestFactory.create(
-                                        localFingerprintData.guid
-                                    )
-                                ) { remoteFingerprintData ->
-                                    remoteFingerprintData?.let {
-                                        save(it)
-                                    }
-                                    liveData.removeObserver(this)
-                                }
-                            } else {
-                                cachedFingerprintData = localFingerprintData
-                                liveData.removeObserver(this)
+                scope.launch {
+                    localStore.get().let { localFingerprintData ->
+                        if (localFingerprintData == null ||
+                            localFingerprintData.isExpired(timestampSupplier())) {
+                            fingerprintRequestExecutor.execute(
+                                request = fingerprintRequestFactory.create(
+                                    localFingerprintData
+                                )
+                            )
+                        } else {
+                            localFingerprintData
+                        }
+                    }.let { fingerprintData ->
+                        if (cachedFingerprintData != fingerprintData) {
+                            fingerprintData?.let {
+                                save(it)
                             }
                         }
-                    })
+                    }
                 }
             }
         }
@@ -67,7 +67,7 @@ internal interface FingerprintDataRepository {
 
         override fun save(fingerprintData: FingerprintData) {
             cachedFingerprintData = fingerprintData
-            store.save(fingerprintData)
+            localStore.save(fingerprintData)
         }
     }
 }

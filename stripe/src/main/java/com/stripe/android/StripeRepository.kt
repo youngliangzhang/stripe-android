@@ -5,6 +5,8 @@ import com.stripe.android.exception.APIException
 import com.stripe.android.exception.AuthenticationException
 import com.stripe.android.exception.CardException
 import com.stripe.android.exception.InvalidRequestException
+import com.stripe.android.model.CardMetadata
+import com.stripe.android.model.Complete3ds2Result
 import com.stripe.android.model.ConfirmPaymentIntentParams
 import com.stripe.android.model.ConfirmSetupIntentParams
 import com.stripe.android.model.Customer
@@ -17,6 +19,7 @@ import com.stripe.android.model.SetupIntent
 import com.stripe.android.model.ShippingInformation
 import com.stripe.android.model.Source
 import com.stripe.android.model.SourceParams
+import com.stripe.android.model.Stripe3ds2AuthParams
 import com.stripe.android.model.Stripe3ds2AuthResult
 import com.stripe.android.model.StripeFile
 import com.stripe.android.model.StripeFileParams
@@ -24,6 +27,7 @@ import com.stripe.android.model.StripeIntent
 import com.stripe.android.model.Token
 import com.stripe.android.model.TokenParams
 import org.json.JSONException
+import org.json.JSONObject
 
 /**
  * An interface for data operations on Stripe API objects.
@@ -229,9 +233,9 @@ internal interface StripeRepository {
         ephemeralKeySecret: String
     )
 
-    @Throws(AuthenticationException::class, InvalidRequestException::class,
-        APIConnectionException::class, APIException::class, CardException::class)
-    fun getFpxBankStatus(options: ApiRequest.Options): FpxBankStatuses
+    suspend fun getFpxBankStatus(options: ApiRequest.Options): FpxBankStatuses
+
+    suspend fun getCardMetadata(binPrefix: String, options: ApiRequest.Options): CardMetadata
 
     fun start3ds2Auth(
         authParams: Stripe3ds2AuthParams,
@@ -243,11 +247,16 @@ internal interface StripeRepository {
     fun complete3ds2Auth(
         sourceId: String,
         requestOptions: ApiRequest.Options,
-        callback: ApiResultCallback<Boolean>
+        callback: ApiResultCallback<Complete3ds2Result>
     )
 
     fun createFile(
         fileParams: StripeFileParams,
         requestOptions: ApiRequest.Options
     ): StripeFile
+
+    fun retrieveObject(
+        url: String,
+        requestOptions: ApiRequest.Options
+    ): JSONObject
 }

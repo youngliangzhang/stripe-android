@@ -1,7 +1,7 @@
 package com.stripe.example
 
+import android.app.Application
 import android.os.StrictMode
-import androidx.multidex.MultiDexApplication
 import com.facebook.stetho.Stetho
 import com.stripe.android.CustomerSession
 import com.stripe.android.PaymentConfiguration
@@ -10,7 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class ExampleApplication : MultiDexApplication() {
+class ExampleApplication : Application() {
 
     override fun onCreate() {
         PaymentConfiguration.init(this, Settings(this).publishableKey)
@@ -21,7 +21,13 @@ class ExampleApplication : MultiDexApplication() {
                 .detectDiskWrites()
                 .detectAll()
                 .penaltyLog()
-                .build())
+                .also {
+                    if (IS_PENALTY_DEATH_ENABLED) {
+                        it.penaltyDeath()
+                    }
+                }
+                .build()
+        )
 
         StrictMode.setVmPolicy(
             StrictMode.VmPolicy.Builder()
@@ -29,7 +35,8 @@ class ExampleApplication : MultiDexApplication() {
                 .detectLeakedClosableObjects()
                 .penaltyLog()
                 .penaltyDeath()
-                .build())
+                .build()
+        )
 
         super.onCreate()
 
@@ -42,5 +49,9 @@ class ExampleApplication : MultiDexApplication() {
             ExampleEphemeralKeyProvider(this),
             false
         )
+    }
+
+    private companion object {
+        private val IS_PENALTY_DEATH_ENABLED = false
     }
 }

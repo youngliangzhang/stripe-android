@@ -2,99 +2,93 @@ package com.stripe.example.module
 
 import android.app.Application
 import androidx.annotation.StringRes
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.liveData
 import com.stripe.android.PaymentIntentResult
 import com.stripe.android.SetupIntentResult
 import com.stripe.example.R
-import io.reactivex.Single
-import io.reactivex.android.schedulers.AndroidSchedulers
-import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.schedulers.Schedulers
+import com.stripe.example.activity.BaseViewModel
+import kotlinx.coroutines.withContext
 import okhttp3.ResponseBody
 import org.json.JSONObject
 import retrofit2.HttpException
 
 internal class StripeIntentViewModel(
     application: Application
-) : AndroidViewModel(application) {
+) : BaseViewModel(application) {
     val inProgress = MutableLiveData<Boolean>()
     val status = MutableLiveData<String>()
 
     val paymentIntentResultLiveData = MutableLiveData<Result<PaymentIntentResult>>()
     val setupIntentResultLiveData = MutableLiveData<Result<SetupIntentResult>>()
 
-    private val context = application.applicationContext
-    private val backendApi = BackendApiFactory(context).create()
-    private val compositeSubscription = CompositeDisposable()
-
     fun createPaymentIntent(
-        country: String,
-        callback: (JSONObject) -> Unit
+        country: String
+    ) = makeBackendRequest(
+        R.string.creating_payment_intent,
+        R.string.payment_intent_status
     ) {
-        makeBackendRequest(
-            backendApi::createPaymentIntent,
-            R.string.creating_payment_intent,
-            R.string.payment_intent_status,
-            country,
-            callback
+        backendApi.createPaymentIntent(
+            mutableMapOf("country" to country)
         )
     }
 
     fun createSetupIntent(
-        country: String,
-        callback: (JSONObject) -> Unit
+        country: String
+    ) = makeBackendRequest(
+        R.string.creating_setup_intent,
+        R.string.setup_intent_status
     ) {
-        makeBackendRequest(
-            backendApi::createSetupIntent,
-            R.string.creating_setup_intent,
-            R.string.setup_intent_status,
-            country,
-            callback
+        backendApi.createSetupIntent(
+            mutableMapOf("country" to country)
         )
     }
 
     private fun makeBackendRequest(
-        apiMethod: (MutableMap<String, String>) -> Single<ResponseBody>,
-        @StringRes creating: Int,
-        @StringRes result: Int,
-        country: String,
-        callback: (JSONObject) -> Unit
-    ) {
-        compositeSubscription.add(
-            apiMethod(
-                mutableMapOf(
-                    "country" to country
-                )
-            )
-                .doOnSubscribe {
-                    inProgress.postValue(true)
-                    status.postValue(context.getString(creating))
-                }
-                .map {
-                    JSONObject(it.string())
-                }
-                .subscribeOn(Schedulers.io())
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(
-                    {
-                        status.postValue(status.value + "\n\n" +
-                            context.getString(result,
-                                it.getString("status")))
-                        callback(it)
-                    },
-                    {
-                        val errorMessage =
-                            (it as? HttpException)?.response()?.errorBody()?.string()
-                                ?: it.message
-                        status.postValue(status.value + "\n\n$errorMessage")
-                        inProgress.postValue(false)
-                    }
-                ))
-    }
+        @StringRes creatingStringRes: Int,
+        @StringRes resultStringRes: Int,
+        apiMethod: suspend () -> ResponseBody
+    ) = liveData {
+        inProgress.postValue(true)
+        status.postValue(resources.getString(creatingStringRes))
 
-    override fun onCleared() {
-        super.onCleared()
-        compositeSubscription.dispose()
+        val result = withContext(workContext) {
+            runCatching {
+                JSONObject(apiMethod().string())
+            }
+        }
+
+        result.fold(
+            onSuccess = {
+                val intentStatus = resources.getString(
+                    resultStringRes,
+                    it.getString("status")
+                )
+                status.postValue(
+                    """
+                    ${status.value}
+                    
+                    
+                    $intentStatus
+                    """.trimIndent()
+                )
+            },
+            onFailure = {
+                val errorMessage =
+                    (it as? HttpException)?.response()?.errorBody()?.string()
+                        ?: it.message
+                status.postValue(
+                    """
+                    ${status.value}
+                    
+                    
+                    $errorMessage
+                    """.trimIndent()
+                )
+                inProgress.postValue(false)
+            }
+        )
+
+        emit(result)
     }
 }

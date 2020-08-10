@@ -5,33 +5,41 @@ import com.google.common.truth.Truth.assertThat
 import com.nhaarman.mockitokotlin2.mock
 import com.nhaarman.mockitokotlin2.whenever
 import java.io.IOException
-import java.util.UUID
 import kotlin.test.Test
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestCoroutineDispatcher
+import kotlinx.coroutines.test.runBlockingTest
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
+@ExperimentalCoroutinesApi
 class FingerprintRequestExecutorTest {
+    private val testDispatcher = TestCoroutineDispatcher()
+
     private val fingerprintRequestFactory = FingerprintRequestFactory(
         context = ApplicationProvider.getApplicationContext()
     )
 
     @Test
-    fun execute_whenSuccessful_shouldReturnResponseWithUuid() {
-        createFingerprintRequestExecutor().execute(
-            request = fingerprintRequestFactory.create(GUID.toString())
-        ) {
-            assertThat(UUID.fromString(it?.guid))
-                .isNotNull()
+    fun `execute() when successful should return non-empty values`() {
+        testDispatcher.runBlockingTest {
+            val remoteFingerprintData = createFingerprintRequestExecutor().execute(
+                request = fingerprintRequestFactory.create(FINGERPRINT_DATA)
+            )
+
+            assertThat(remoteFingerprintData?.guid)
+                .isNotEmpty()
+            assertThat(remoteFingerprintData?.muid)
+                .isNotEmpty()
+            assertThat(remoteFingerprintData?.sid)
+                .isNotEmpty()
         }
     }
 
     @Test
-    fun execute_whenErrorResponse_shouldInvokeCallback() {
-        var callbackCount = 0
-
-        val request = fingerprintRequestFactory.create(GUID.toString())
+    fun `execute() when successful should return null`() {
+        val request = fingerprintRequestFactory.create(FINGERPRINT_DATA)
         val connection = mock<StripeConnection>().also {
             whenever(it.responseCode).thenReturn(500)
         }
@@ -41,46 +49,37 @@ class FingerprintRequestExecutorTest {
                 .thenReturn(connection)
         }
 
-        createFingerprintRequestExecutor(connectionFactory = connectionFactory)
-            .execute(
-                request = request,
-                callback = {
-                    callbackCount++
-                }
-            )
-
-        assertThat(callbackCount)
-            .isEqualTo(1)
+        testDispatcher.runBlockingTest {
+            assertThat(
+                createFingerprintRequestExecutor(connectionFactory = connectionFactory)
+                    .execute(request = request)
+            ).isNull()
+        }
     }
 
     @Test
-    fun execute_whenConnectionException_shouldInvokeCallback() {
-        var callbackCount = 0
-
-        val request = fingerprintRequestFactory.create(GUID.toString())
+    fun `execute() when connection exception should return null`() {
+        val request = fingerprintRequestFactory.create(FINGERPRINT_DATA)
         val connectionFactory = mock<ConnectionFactory>().also {
             whenever(it.create(request)).thenThrow(IOException())
         }
-        createFingerprintRequestExecutor(connectionFactory = connectionFactory)
-            .execute(
-                request = request,
-                callback = {
-                    callbackCount++
-                }
-            )
 
-        assertThat(callbackCount)
-            .isEqualTo(1)
+        testDispatcher.runBlockingTest {
+            assertThat(
+                createFingerprintRequestExecutor(connectionFactory = connectionFactory)
+                    .execute(request = request)
+            ).isNull()
+        }
     }
 
     private fun createFingerprintRequestExecutor(
         connectionFactory: ConnectionFactory = ConnectionFactory.Default()
     ) = FingerprintRequestExecutor.Default(
-        workScope = MainScope(),
-        connectionFactory = connectionFactory
+        connectionFactory = connectionFactory,
+        workDispatcher = testDispatcher
     )
 
     private companion object {
-        private val GUID = UUID.randomUUID()
+        private val FINGERPRINT_DATA = FingerprintDataFixtures.create()
     }
 }

@@ -1,49 +1,39 @@
 package com.stripe.android
 
+import com.stripe.android.model.parsers.FingerprintDataJsonParser
 import java.util.Calendar
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal interface FingerprintRequestExecutor {
-    fun execute(
-        request: FingerprintRequest,
-        callback: (FingerprintData?) -> Unit
-    )
+    suspend fun execute(
+        request: FingerprintRequest
+    ): FingerprintData?
 
     class Default(
-        private val workScope: CoroutineScope = CoroutineScope(Dispatchers.IO),
-        private val connectionFactory: ConnectionFactory = ConnectionFactory.Default()
+        private val connectionFactory: ConnectionFactory = ConnectionFactory.Default(),
+        private val workDispatcher: CoroutineDispatcher = Dispatchers.IO
     ) : FingerprintRequestExecutor {
         private val timestampSupplier = {
             Calendar.getInstance().timeInMillis
         }
 
-        override fun execute(
-            request: FingerprintRequest,
-            callback: (FingerprintData?) -> Unit
-        ) {
-            workScope.launch {
-                val fingerprintData = runCatching {
-                    executeInternal(request)
-                }.getOrNull()
-
-                withContext(Dispatchers.Main) {
-                    // fingerprint request failures should be non-fatal
-                    callback(fingerprintData)
-                }
-            }
+        override suspend fun execute(
+            request: FingerprintRequest
+        ) = withContext(workDispatcher) {
+            // fingerprint request failures should be non-fatal
+            runCatching {
+                executeInternal(request)
+            }.getOrNull()
         }
 
         private fun executeInternal(request: FingerprintRequest): FingerprintData? {
             connectionFactory.create(request).use { conn ->
                 return runCatching {
                     conn.response.takeIf { it.isOk }?.let {
-                        FingerprintData(
-                            guid = it.body,
-                            timestamp = timestampSupplier()
-                        )
+                        FingerprintDataJsonParser(timestampSupplier)
+                            .parse(it.responseJson)
                     }
                 }.getOrNull()
             }

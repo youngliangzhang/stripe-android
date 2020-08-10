@@ -23,16 +23,17 @@ configurations {
 
 dependencies {
     implementation 'androidx.annotation:annotation:1.1.0'
-    implementation 'androidx.appcompat:appcompat:1.1.0'
+    implementation 'androidx.appcompat:appcompat:1.2.0-rc02'
     implementation 'androidx.recyclerview:recyclerview:1.1.0'
-    implementation "androidx.lifecycle:lifecycle-viewmodel:$androidLifecycleVersion"
+    implementation "androidx.lifecycle:lifecycle-livedata-ktx:$androidLifecycleVersion"
+    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$androidLifecycleVersion"
     implementation "androidx.lifecycle:lifecycle-viewmodel-savedstate:$androidLifecycleVersion"
     implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.0.0'
 
     // Api for this import because we use reflection to alter TextInputLayout
     api 'com.google.android.material:material:1.1.0'
 
-    implementation "com.stripe:stripe-3ds2-android:2.8.1"
+    implementation "com.stripe:stripe-3ds2-android:4.0.4"
 
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlinVersion"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinCoroutinesVersion"
@@ -46,10 +47,11 @@ dependencies {
     testImplementation "org.mockito:mockito-core:3.3.3"
     testImplementation 'org.robolectric:robolectric:4.3.1'
     testImplementation 'androidx.test:core:1.2.0'
-    testImplementation 'org.json:json:20190722'
+    testImplementation 'org.json:json:20200518'
     testImplementation "com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0"
     testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlinVersion"
     testImplementation "org.jetbrains.kotlin:kotlin-test-annotations-common:$kotlinVersion"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$kotlinCoroutinesVersion"
     testImplementation 'com.google.truth:truth:1.0.1'
 
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
@@ -64,9 +66,11 @@ android {
     compileSdkVersion rootProject.ext.compileSdkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     defaultConfig {
-        minSdkVersion 19
+        minSdkVersion 21
         targetSdkVersion rootProject.ext.compileSdkVersion
         consumerProguardFiles 'proguard-rules.txt'
+
+        vectorDrawables.useSupportLibrary = true
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments clearPackageData: 'true'
@@ -103,8 +107,16 @@ android {
         outputDirectory = "${project.rootDir}/docs/"
     }
 
-    viewBinding {
-        enabled = true
+    buildFeatures {
+        viewBinding true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = "1.8"
     }
 }
 

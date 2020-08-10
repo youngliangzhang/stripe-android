@@ -2,19 +2,24 @@ package com.stripe.android.view
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import com.google.common.truth.Truth.assertThat
 import com.stripe.android.ApiKeyFixtures
 import com.stripe.android.PaymentConfiguration
 import com.stripe.android.model.FpxBankStatuses
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertTrue
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestCoroutineDispatcher
+import kotlinx.coroutines.test.runBlockingTest
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
+@ExperimentalCoroutinesApi
 class FpxViewModelTest {
     private val application: Application = ApplicationProvider.getApplicationContext()
+
+    private val testDispatcher = TestCoroutineDispatcher()
 
     @BeforeTest
     fun setup() {
@@ -22,14 +27,22 @@ class FpxViewModelTest {
     }
 
     @Test
-    fun loadFpxBankStatues_workingOnMainThread_shouldUpdateLiveData() {
-        var bankStatuses: FpxBankStatuses? = null
-        val viewModel = FpxViewModel(application, MainScope())
-        viewModel.loadFpxBankStatues()
-        viewModel.fpxBankStatuses.observeForever {
-            bankStatuses = it
-        }
+    fun `getFpxBankStatues should update LiveData`() {
+        val viewModel = FpxViewModel(
+            application,
+            workDispatcher = testDispatcher
+        )
+        testDispatcher.runBlockingTest {
+            var bankStatuses: FpxBankStatuses? = null
+            viewModel.getFpxBankStatues().observeForever {
+                bankStatuses = it
+            }
 
-        assertTrue(requireNotNull(bankStatuses).isOnline(FpxBank.Hsbc))
+            assertThat(
+                setOf(FpxBank.Hsbc, FpxBank.Bsn).any {
+                    bankStatuses?.isOnline(it) == true
+                }
+            ).isTrue()
+        }
     }
 }

@@ -15,7 +15,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.stripe.android.ApiResultCallback
-import com.stripe.android.model.Card
+import com.stripe.android.model.CardParams
 import com.stripe.android.model.Token
 import com.stripe.android.view.CardValidCallback
 import com.stripe.example.R
@@ -51,17 +51,16 @@ class CreateCardTokenActivity : AppCompatActivity() {
         viewBinding.createTokenButton.setOnClickListener {
             BackgroundTaskTracker.onStart()
 
-            val card = viewBinding.cardInputWidget.card
-
-            if (card != null) {
+            viewBinding.cardInputWidget.cardParams?.let { cardParams ->
                 onRequestStart()
-                viewModel.createCardToken(card).observe(this, Observer {
-                    onRequestEnd()
-                    adapter.addToken(it)
-                })
-            } else {
-                snackbarController.show(getString(R.string.invalid_card_details))
-            }
+                viewModel.createCardToken(cardParams).observe(
+                    this,
+                    Observer {
+                        onRequestEnd()
+                        adapter.addToken(it)
+                    }
+                )
+            } ?: snackbarController.show(getString(R.string.invalid_card_details))
         }
 
         viewBinding.cardInputWidget.setCardValidCallback(object : CardValidCallback {
@@ -127,23 +126,25 @@ class CreateCardTokenActivity : AppCompatActivity() {
     internal class CreateCardTokenViewModel(
         application: Application
     ) : AndroidViewModel(application) {
-        private val context = application.applicationContext
-        private val stripe = StripeFactory(context).create()
+        private val stripe = StripeFactory(application).create()
 
-        fun createCardToken(card: Card): LiveData<Token> {
+        fun createCardToken(cardParams: CardParams): LiveData<Token> {
             val data = MutableLiveData<Token>()
 
-            stripe.createCardToken(card, callback = object : ApiResultCallback<Token> {
-                override fun onSuccess(result: Token) {
-                    BackgroundTaskTracker.onStop()
-                    data.value = result
-                }
+            stripe.createCardToken(
+                cardParams,
+                callback = object : ApiResultCallback<Token> {
+                    override fun onSuccess(result: Token) {
+                        BackgroundTaskTracker.onStop()
+                        data.value = result
+                    }
 
-                override fun onError(e: Exception) {
-                    BackgroundTaskTracker.onStop()
-                    Log.e("StripeExample", "Error while creating card token", e)
+                    override fun onError(e: Exception) {
+                        BackgroundTaskTracker.onStop()
+                        Log.e("StripeExample", "Error while creating card token", e)
+                    }
                 }
-            })
+            )
 
             return data
         }

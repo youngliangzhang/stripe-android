@@ -8,7 +8,6 @@ import android.view.Menu
 import android.view.MenuItem
 import androidx.annotation.ColorInt
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.stripe.android.Logger
@@ -63,19 +62,19 @@ class PaymentAuthWebViewActivity : AppCompatActivity() {
         }
 
         logger.debug("PaymentAuthWebViewActivity#onCreate() - PaymentAuthWebView init and loadUrl")
-        viewBinding.authWebView.init(
+        viewBinding.webView.init(
             this,
             logger,
-            viewBinding.authWebViewProgressBar,
+            viewBinding.progressBar,
             clientSecret,
             args.returnUrl
         )
-        viewBinding.authWebView.loadUrl(args.url)
+        viewBinding.webView.loadUrl(args.url)
     }
 
     override fun onDestroy() {
-        viewBinding.authWebViewContainer.removeAllViews()
-        viewBinding.authWebView.destroy()
+        viewBinding.webViewContainer.removeAllViews()
+        viewBinding.webView.destroy()
         super.onDestroy()
     }
 
@@ -101,14 +100,16 @@ class PaymentAuthWebViewActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
-        cancelIntentSource()
+        if (viewBinding.webView.canGoBack()) {
+            viewBinding.webView.goBack()
+        } else {
+            cancelIntentSource()
+        }
     }
 
     private fun cancelIntentSource() {
-        viewModel.cancelIntentSource().observe(this, Observer { intent ->
-            setResult(Activity.RESULT_OK, intent)
-            finish()
-        })
+        setResult(Activity.RESULT_OK, viewModel.cancellationResult)
+        finish()
     }
 
     private fun customizeToolbar() {

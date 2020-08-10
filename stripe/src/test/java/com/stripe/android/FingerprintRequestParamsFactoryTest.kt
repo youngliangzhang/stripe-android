@@ -1,13 +1,8 @@
 package com.stripe.android
 
 import android.content.Context
-import android.content.pm.PackageInfo
-import android.content.pm.PackageManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import com.nhaarman.mockitokotlin2.mock
-import com.nhaarman.mockitokotlin2.whenever
-import java.util.UUID
 import kotlin.test.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -15,16 +10,11 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class FingerprintRequestParamsFactoryTest {
 
-    private val packageManager: PackageManager = mock()
     private val context: Context = ApplicationProvider.getApplicationContext()
-    private val clientFingerprintDataStore = FakeClientFingerprintDataStore(
-        muid = MUID,
-        sid = SID
-    )
 
     @Test
     fun initWithAppContext_shouldSucceed() {
-        assertThat(FingerprintRequestParamsFactory(context).createParams())
+        assertThat(FingerprintRequestParamsFactory(context).createParams(FINGERPRINT_DATA))
             .isNotEmpty()
     }
 
@@ -33,10 +23,9 @@ class FingerprintRequestParamsFactoryTest {
         val params = FingerprintRequestParamsFactory(
             context.resources.displayMetrics,
             "package_name",
-            context.packageManager,
-            "-5",
-            clientFingerprintDataStore
-        ).createParams()
+            null,
+            "-5"
+        ).createParams(FINGERPRINT_DATA)
         assertThat(params)
             .hasSize(5)
 
@@ -53,42 +42,39 @@ class FingerprintRequestParamsFactoryTest {
         assertThat(secondMap)
             .hasSize(9)
         assertThat(secondMap["d"])
-            .isEqualTo(MUID.toString())
+            .isEqualTo(FINGERPRINT_DATA.muid)
         assertThat(secondMap["e"])
-            .isEqualTo(SID.toString())
+            .isEqualTo(FINGERPRINT_DATA.sid)
     }
 
     @Test
     fun createParams_withVersionName_includesVersionName() {
-        val packageInfo = PackageInfo().also {
-            it.versionName = "version_name"
-        }
-
-        whenever(packageManager.getPackageInfo("package_name", 0))
-            .thenReturn(packageInfo)
-
         val params = FingerprintRequestParamsFactory(
             context.resources.displayMetrics,
             "package_name",
-            packageManager,
-            "-5",
-            clientFingerprintDataStore
+            "version_name",
+            "-5"
         )
-            .createParams()
+            .createParams(
+                FINGERPRINT_DATA
+            )
 
         val secondMap = params["b"] as Map<*, *>
         assertThat(secondMap)
             .hasSize(10)
+        assertThat(secondMap["d"])
+            .isEqualTo(FINGERPRINT_DATA.muid)
+        assertThat(secondMap["e"])
+            .isEqualTo(FINGERPRINT_DATA.sid)
         assertThat(secondMap["l"])
             .isEqualTo("version_name")
     }
 
-    private fun getSingleValue(map: Map<*, *>, key: String): Any? {
-        return (map[key] as Map<*, *>)["v"]
+    private fun getSingleValue(map: Map<*, *>, key: String): String {
+        return (map[key] as Map<*, *>)["v"].toString()
     }
 
     private companion object {
-        private val MUID = UUID.randomUUID()
-        private val SID = UUID.randomUUID()
+        private val FINGERPRINT_DATA = FingerprintDataFixtures.create()
     }
 }

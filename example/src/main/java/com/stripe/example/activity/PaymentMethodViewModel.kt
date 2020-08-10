@@ -12,7 +12,7 @@ import com.stripe.example.StripeFactory
 internal class PaymentMethodViewModel(
     application: Application
 ) : AndroidViewModel(application) {
-    private val stripe = StripeFactory(application.applicationContext).create()
+    private val stripe = StripeFactory(application).create()
 
     internal fun createPaymentMethod(
         params: PaymentMethodCreateParams
@@ -28,7 +28,8 @@ internal class PaymentMethodViewModel(
                 override fun onError(e: Exception) {
                     resultData.value = Result.failure(e)
                 }
-            })
+            }
+        )
         return resultData
     }
 }

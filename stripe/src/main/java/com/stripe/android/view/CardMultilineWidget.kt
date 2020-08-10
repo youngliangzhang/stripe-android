@@ -26,12 +26,9 @@ import com.stripe.android.databinding.CardMultilineWidgetBinding
 import com.stripe.android.model.Address
 import com.stripe.android.model.Card
 import com.stripe.android.model.CardBrand
+import com.stripe.android.model.CardParams
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.PaymentMethodCreateParams
-import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_CARD
-import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_CVC
-import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_EXPIRY
-import com.stripe.android.view.CardInputListener.FocusField.Companion.FOCUS_POSTAL
 import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlin.properties.Delegates
@@ -86,6 +83,7 @@ class CardMultilineWidget @JvmOverloads constructor(
     private var customCvcLabel: String? = null
 
     private var cardBrand: CardBrand = CardBrand.Unknown
+
     @ColorInt
     private val tintColorInt: Int
 
@@ -124,7 +122,7 @@ class CardMultilineWidget @JvmOverloads constructor(
      */
     override val paymentMethodCard: PaymentMethodCreateParams.Card?
         get() {
-            return card?.let {
+            return cardParams?.let {
                 PaymentMethodCreateParams.Card(
                     number = it.number,
                     cvc = it.cvc,
@@ -174,15 +172,47 @@ class CardMultilineWidget @JvmOverloads constructor(
      * A [Card] representing the card details and postal code if all fields are valid;
      * otherwise `null`
      */
+    @Deprecated("Use cardParams", ReplaceWith("cardParams"))
     override val card: Card?
         get() {
             return cardBuilder?.build()
         }
 
     /**
+     * A [CardParams] representing the card details and postal code if all fields are valid;
+     * otherwise `null`
+     */
+    override val cardParams: CardParams?
+        get() {
+            if (!validateAllFields()) {
+                shouldShowErrorIcon = true
+                return null
+            }
+
+            shouldShowErrorIcon = false
+
+            val cardDate = requireNotNull(expiryDateEditText.validDateFields)
+            val cvcValue = cvcEditText.text?.toString()
+            val postalCode = postalCodeEditText.text?.toString()
+                .takeIf { shouldShowPostalCode }
+
+            return CardParams(
+                setOf(CARD_MULTILINE_TOKEN),
+                number = cardNumber.orEmpty(),
+                expMonth = cardDate.first,
+                expYear = cardDate.second,
+                cvc = cvcValue,
+                address = Address.Builder()
+                    .setPostalCode(postalCode.takeUnless { it.isNullOrBlank() })
+                    .build()
+            )
+        }
+
+    /**
      * A [Card.Builder] representing the card details and postal code if all fields are valid;
      * otherwise `null`
      */
+    @Deprecated("Use cardParams", ReplaceWith("cardParams"))
     override val cardBuilder: Card.Builder?
         get() {
             if (!validateAllFields()) {
@@ -620,7 +650,7 @@ class CardMultilineWidget @JvmOverloads constructor(
         cardNumberEditText.onFocusChangeListener = OnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 cardNumberEditText.setHintDelayed(cardHintText, CARD_NUMBER_HINT_DELAY)
-                cardInputListener?.onFocusChange(FOCUS_CARD)
+                cardInputListener?.onFocusChange(CardInputListener.FocusField.CardNumber)
             } else {
                 cardNumberEditText.hint = ""
             }
@@ -629,7 +659,7 @@ class CardMultilineWidget @JvmOverloads constructor(
         expiryDateEditText.onFocusChangeListener = OnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 expiryDateEditText.setHintDelayed(R.string.expiry_date_hint, COMMON_HINT_DELAY)
-                cardInputListener?.onFocusChange(FOCUS_EXPIRY)
+                cardInputListener?.onFocusChange(CardInputListener.FocusField.ExpiryDate)
             } else {
                 expiryDateEditText.hint = ""
             }
@@ -639,7 +669,7 @@ class CardMultilineWidget @JvmOverloads constructor(
             if (hasFocus) {
                 flipToCvcIconIfNotFinished()
                 cvcEditText.setHintDelayed(cvcHelperText, COMMON_HINT_DELAY)
-                cardInputListener?.onFocusChange(FOCUS_CVC)
+                cardInputListener?.onFocusChange(CardInputListener.FocusField.Cvc)
             } else {
                 updateBrandUi()
                 cvcEditText.hint = ""
@@ -653,7 +683,8 @@ class CardMultilineWidget @JvmOverloads constructor(
             if (hasFocus) {
                 if (usZipCodeRequired)
                     postalCodeEditText.setHintDelayed(R.string.zip_helper, COMMON_HINT_DELAY)
-                cardInputListener?.onFocusChange(FOCUS_POSTAL)
+                cardInputListener?.onFocusChange(CardInputListener.FocusField.PostalCode)
+                postalCodeEditText.setHintDelayed(R.string.zip_helper, COMMON_HINT_DELAY)
             } else {
                 postalCodeEditText.hint = ""
             }

@@ -4,6 +4,7 @@ import com.stripe.android.model.Address
 import com.stripe.android.model.PaymentIntent
 import com.stripe.android.model.StripeIntent
 import com.stripe.android.model.StripeJsonUtils
+import com.stripe.android.model.StripeJsonUtils.jsonArrayToList
 import com.stripe.android.model.StripeJsonUtils.optString
 import org.json.JSONObject
 
@@ -22,9 +23,13 @@ internal class PaymentIntentJsonParser : ModelJsonParser<PaymentIntent> {
         val cancellationReason = PaymentIntent.CancellationReason.fromCode(
             optString(json, FIELD_CANCELLATION_REASON)
         )
-        val captureMethod = optString(json, FIELD_CAPTURE_METHOD)
+        val captureMethod = PaymentIntent.CaptureMethod.fromCode(
+            optString(json, FIELD_CAPTURE_METHOD)
+        )
         val clientSecret = optString(json, FIELD_CLIENT_SECRET)
-        val confirmationMethod = optString(json, FIELD_CONFIRMATION_METHOD)
+        val confirmationMethod = PaymentIntent.ConfirmationMethod.fromCode(
+            optString(json, FIELD_CONFIRMATION_METHOD)
+        )
         val created = json.optLong(FIELD_CREATED)
         val currency = StripeJsonUtils.optCurrency(json, FIELD_CURRENCY)
         val description = optString(json, FIELD_DESCRIPTION)
@@ -131,36 +136,6 @@ internal class PaymentIntentJsonParser : ModelJsonParser<PaymentIntent> {
             private const val FIELD_NAME = "name"
             private const val FIELD_PHONE = "phone"
             private const val FIELD_TRACKING_NUMBER = "tracking_number"
-        }
-    }
-
-    internal class NextActionDataParser : ModelJsonParser<PaymentIntent.NextActionData> {
-        override fun parse(json: JSONObject): PaymentIntent.NextActionData? {
-            return when {
-                json.has(FIELD_DISPLAY_OXXO_DETAILS) ->
-                    DisplayOxxoDetailsJsonParser().parse(
-                        json.optJSONObject(FIELD_DISPLAY_OXXO_DETAILS) ?: JSONObject()
-                    )
-                else -> null
-            }
-        }
-
-        private class DisplayOxxoDetailsJsonParser : ModelJsonParser<PaymentIntent.NextActionData.DisplayOxxoDetails> {
-            override fun parse(json: JSONObject): PaymentIntent.NextActionData.DisplayOxxoDetails? {
-                return PaymentIntent.NextActionData.DisplayOxxoDetails(
-                    expiresAfter = json.optInt(FIELD_EXPIRES_AFTER),
-                    number = optString(json, FIELD_NUMBER)
-                )
-            }
-
-            private companion object {
-                private const val FIELD_EXPIRES_AFTER = "expires_after"
-                private const val FIELD_NUMBER = "number"
-            }
-        }
-
-        private companion object {
-            private const val FIELD_DISPLAY_OXXO_DETAILS = "display_oxxo_details"
         }
     }
 

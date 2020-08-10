@@ -14,7 +14,6 @@ import com.stripe.android.model.PaymentMethodCreateParams
 import com.stripe.android.view.CardValidCallback
 import com.stripe.example.databinding.CreateCardPaymentMethodActivityBinding
 import com.stripe.example.databinding.PaymentMethodItemBinding
-import io.reactivex.disposables.CompositeDisposable
 
 class CreateCardPaymentMethodActivity : AppCompatActivity() {
     private val viewBinding: CreateCardPaymentMethodActivityBinding by lazy {
@@ -27,8 +26,6 @@ class CreateCardPaymentMethodActivity : AppCompatActivity() {
             ViewModelProvider.AndroidViewModelFactory(application)
         )[PaymentMethodViewModel::class.java]
     }
-
-    private val compositeDisposable = CompositeDisposable()
 
     private val adapter: PaymentMethodsAdapter = PaymentMethodsAdapter()
     private val snackbarController: SnackbarController by lazy {
@@ -66,15 +63,18 @@ class CreateCardPaymentMethodActivity : AppCompatActivity() {
 
     private fun createPaymentMethod(params: PaymentMethodCreateParams) {
         onCreatePaymentMethodStart()
-        viewModel.createPaymentMethod(params).observe(this, Observer { result ->
-            onCreatePaymentMethodCompleted()
-            result.fold(
-                onSuccess = ::onCreatedPaymentMethod,
-                onFailure = {
-                    showSnackbar(it.message.orEmpty())
-                }
-            )
-        })
+        viewModel.createPaymentMethod(params).observe(
+            this,
+            Observer { result ->
+                onCreatePaymentMethodCompleted()
+                result.fold(
+                    onSuccess = ::onCreatedPaymentMethod,
+                    onFailure = {
+                        showSnackbar(it.message.orEmpty())
+                    }
+                )
+            }
+        )
     }
 
     private fun showSnackbar(message: String) {
@@ -98,11 +98,6 @@ class CreateCardPaymentMethodActivity : AppCompatActivity() {
         } else {
             showSnackbar("Created null PaymentMethod")
         }
-    }
-
-    override fun onDestroy() {
-        compositeDisposable.dispose()
-        super.onDestroy()
     }
 
     private class PaymentMethodsAdapter :
@@ -141,7 +136,7 @@ class CreateCardPaymentMethodActivity : AppCompatActivity() {
             internal fun setPaymentMethod(paymentMethod: PaymentMethod) {
                 val card = paymentMethod.card
                 viewBinding.paymentMethodId.text = paymentMethod.id
-                viewBinding.brand.text = card?.brand.orEmpty()
+                viewBinding.brand.text = card?.brand?.displayName.orEmpty()
                 viewBinding.last4.text = card?.last4.orEmpty()
             }
         }

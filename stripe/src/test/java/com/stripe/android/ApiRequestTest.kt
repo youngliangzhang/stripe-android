@@ -2,9 +2,8 @@ package com.stripe.android
 
 import android.net.Uri
 import com.google.common.truth.Truth.assertThat
-import com.stripe.android.model.CardFixtures
+import com.stripe.android.model.CardParamsFixtures
 import java.io.ByteArrayOutputStream
-import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -15,22 +14,17 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 internal class ApiRequestTest {
 
-    private val apiFingerprintParamsFactory = ApiFingerprintParamsFactory(
-        store = FakeClientFingerprintDataStore(MUID)
-    )
-
     @Test
     fun url_withCardData_createsProperQueryString() {
-        val cardMap = CardFixtures.MINIMUM_CARD.toParamMap()
-            .plus(apiFingerprintParamsFactory.createParams(GUID.toString()))
         val url = FACTORY.createGet(
-            StripeApiRepository.sourcesUrl,
-            OPTIONS,
-            cardMap
+            url = StripeApiRepository.sourcesUrl,
+            options = OPTIONS,
+            params = CardParamsFixtures.MINIMUM.toParamMap()
+                .plus(FINGERPRINT_DATA.params)
         ).url
 
         assertThat(Uri.parse(url))
-            .isEqualTo(Uri.parse("https://api.stripe.com/v1/sources?muid=$MUID&guid=$GUID&card%5Bnumber%5D=4242424242424242&card%5Bexp_month%5D=1&card%5Bcvc%5D=123&card%5Bexp_year%5D=2050"))
+            .isEqualTo(Uri.parse("https://api.stripe.com/v1/sources?muid=${FINGERPRINT_DATA.muid}&guid=${FINGERPRINT_DATA.guid}&card%5Bnumber%5D=4242424242424242&card%5Bexp_month%5D=1&card%5Bcvc%5D=123&card%5Bexp_year%5D=2050&sid=${FINGERPRINT_DATA.sid}"))
     }
 
     @Test
@@ -101,7 +95,6 @@ internal class ApiRequestTest {
 
         private val FACTORY = ApiRequest.Factory()
 
-        private val MUID = UUID.randomUUID()
-        private val GUID = UUID.randomUUID()
+        private val FINGERPRINT_DATA = FingerprintDataFixtures.create()
     }
 }

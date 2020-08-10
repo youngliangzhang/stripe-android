@@ -2,6 +2,7 @@ package com.stripe.android.model
 
 import android.net.Uri
 import android.os.Parcelable
+import com.stripe.android.utils.StripeUrlUtils
 import kotlinx.android.parcel.Parcelize
 
 /**
@@ -43,22 +44,11 @@ interface StripeIntent : StripeModel {
 
     val nextActionType: NextActionType?
 
-    /**
-     * Contains instructions for authenticating by redirecting your customer to another page
-     * or application.
-     */
-    val redirectData: RedirectData?
-
     val clientSecret: String?
 
-    /**
-     * When confirming a PaymentIntent with the Stripe SDK, the Stripe SDK depends on this property
-     * to invoke authentication flows. The shape of the contents is subject to change and is only
-     * intended to be used by the Stripe SDK.
-     */
-    val stripeSdkData: SdkData?
-
     val status: Status?
+
+    val nextActionData: NextActionData?
 
     fun requiresAction(): Boolean
 
@@ -69,7 +59,8 @@ interface StripeIntent : StripeModel {
      */
     enum class NextActionType(val code: String) {
         RedirectToUrl("redirect_to_url"),
-        UseStripeSdk("use_stripe_sdk");
+        UseStripeSdk("use_stripe_sdk"),
+        DisplayOxxoDetails("display_oxxo_details");
 
         override fun toString(): String {
             return code
@@ -138,62 +129,94 @@ interface StripeIntent : StripeModel {
         }
     }
 
-    /**
-     * When confirming a [PaymentIntent] or [SetupIntent] with the Stripe SDK, the Stripe SDK
-     * depends on this property to invoke authentication flows. The shape of the contents is subject
-     * to change and is only intended to be used by the Stripe SDK.
-     */
-    data class SdkData internal constructor(internal val data: Map<String, *>) {
-        internal val type: String = data[FIELD_TYPE] as String
+    sealed class NextActionData : StripeModel {
+        @Parcelize
+        data class DisplayOxxoDetails(
+            /**
+             * The timestamp after which the OXXO expires.
+             */
+            val expiresAfter: Int = 0,
 
-        val is3ds2: Boolean = TYPE_3DS2 == type
+            /**
+             * The OXXO number.
+             */
+            val number: String? = null,
 
-        val is3ds1: Boolean = TYPE_3DS1 == type
+            /**
+             * URL of a webpage containing the voucher for this OXXO payment.
+             */
+            val hostedVoucherUrl: String? = null
+        ) : NextActionData()
 
-        private companion object {
-            private const val FIELD_TYPE = "type"
+        /**
+         * Contains instructions for authenticating by redirecting your customer to another
+         * page or application.
+         */
+        @Parcelize
+        data class RedirectToUrl(
+            /**
+             * The URL you must redirect your customer to in order to authenticate.
+             */
+            val url: Uri,
+            /**
+             * If the customer does not exit their browser while authenticating, they will be redirected
+             * to this specified URL after completion.
+             */
+            val returnUrl: String?,
+            val mobileData: MobileData?
+        ) : NextActionData() {
 
-            private const val TYPE_3DS2 = "stripe_3ds2_fingerprint"
-            private const val TYPE_3DS1 = "three_d_secure_redirect"
+            sealed class MobileData : StripeModel {
+                @Parcelize
+                data class Alipay constructor(
+                    val data: String,
+                    val authCompleteUrl: String?
+                ) : MobileData() {
+                    constructor(data: String) : this(data, extractReturnUrl(data))
+                }
+
+                private companion object {
+                    /**
+                     * The alipay data string is formatted as query parameters.
+                     * When authenticate is complete, we make a request to the
+                     * return_url param, as a hint to the backend to ping Alipay for
+                     * the updated state
+                     */
+                    private fun extractReturnUrl(data: String): String? = runCatching {
+                        Uri.parse("alipay://url?$data")
+                            .getQueryParameter("return_url")?.takeIf {
+                                StripeUrlUtils.isStripeUrl(it)
+                            }
+                    }.getOrNull()
+                }
+            }
         }
-    }
-
-    /**
-     * Contains instructions for authenticating by redirecting your customer to another
-     * page or application.
-     */
-    @Parcelize
-    data class RedirectData internal constructor(
-        /**
-         * The URL you must redirect your customer to in order to authenticate.
-         */
-        val url: Uri,
 
         /**
-         * If the customer does not exit their browser while authenticating, they will be redirected
-         * to this specified URL after completion.
+         * When confirming a [PaymentIntent] or [SetupIntent] with the Stripe SDK, the Stripe SDK
+         * depends on this property to invoke authentication flows. The shape of the contents is subject
+         * to change and is only intended to be used by the Stripe SDK.
          */
-        val returnUrl: String?
-    ) : Parcelable {
-        internal companion object {
-            internal const val FIELD_URL = "url"
-            internal const val FIELD_RETURN_URL = "return_url"
+        sealed class SdkData : NextActionData() {
+            @Parcelize
+            data class Use3DS1(
+                val url: String
+            ) : SdkData()
 
-            @JvmSynthetic
-            internal fun create(redirectToUrlHash: Map<*, *>): RedirectData? {
-                val urlObj = redirectToUrlHash[FIELD_URL]
-                val returnUrlObj = redirectToUrlHash[FIELD_RETURN_URL]
-                val url = if (urlObj is String) {
-                    urlObj.toString()
-                } else {
-                    null
-                }
-                val returnUrl = if (returnUrlObj is String) {
-                    returnUrlObj.toString()
-                } else {
-                    null
-                }
-                return url?.let { RedirectData(Uri.parse(it), returnUrl) }
+            @Parcelize
+            data class Use3DS2(
+                val source: String,
+                val serverName: String,
+                val transactionId: String,
+                val serverEncryption: DirectoryServerEncryption
+            ) : SdkData() {
+                @Parcelize
+                data class DirectoryServerEncryption(
+                    val directoryServerId: String,
+                    val dsCertificateData: String,
+                    val rootCertsData: List<String>,
+                    val keyId: String?
+                ) : Parcelable
             }
         }
     }

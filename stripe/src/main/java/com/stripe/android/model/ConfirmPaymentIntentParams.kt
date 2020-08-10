@@ -501,5 +501,25 @@ data class ConfirmPaymentIntentParams internal constructor(
                 shipping = shipping
             )
         }
+
+        /**
+         * Create the parameters necessary for confirming a [PaymentIntent] with Alipay
+         *
+         * @param clientSecret client secret from the PaymentIntent that is to be confirmed
+         * @param returnUrl the URL the customer should be redirected to after the authorization
+         * process
+         */
+        @JvmStatic
+        internal fun createAlipay(
+            clientSecret: String
+        ): ConfirmPaymentIntentParams {
+            return ConfirmPaymentIntentParams(
+                clientSecret = clientSecret,
+                paymentMethodCreateParams = PaymentMethodCreateParams.createAlipay(),
+                // return_url is no longer used by is still required by the backend
+                // TODO(smaskell): remove this when no longer required
+                returnUrl = "stripe://return_url"
+            )
+        }
     }
 }

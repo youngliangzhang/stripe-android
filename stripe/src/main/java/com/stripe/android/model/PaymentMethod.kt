@@ -1,7 +1,6 @@
 package com.stripe.android.model
 
 import android.os.Parcelable
-import androidx.annotation.StringDef
 import com.stripe.android.ObjectBuilder
 import com.stripe.android.model.parsers.PaymentMethodJsonParser
 import com.stripe.android.model.wallets.Wallet
@@ -71,6 +70,8 @@ data class PaymentMethod internal constructor(
      * additional information about the object in a structured format.
      *
      * [metadata](https://stripe.com/docs/api/payment_methods/object#payment_method_object-metadata)
+     *
+     * Note: This field will only be populated when retrieved using an ephemeral key.
      */
     @JvmField val metadata: Map<String, String>? = null,
 
@@ -368,7 +369,7 @@ data class PaymentMethod internal constructor(
          *
          * [card.brand](https://stripe.com/docs/api/payment_methods/object#payment_method_object-card-brand)
          */
-        @field:Brand @JvmField val brand: String? = null,
+        @JvmField val brand: CardBrand = CardBrand.Unknown,
 
         /**
          * Checks on Card address and CVC if provided
@@ -430,24 +431,8 @@ data class PaymentMethod internal constructor(
         internal val networks: Networks? = null
     ) : StripeModel {
 
-        @Retention(AnnotationRetention.SOURCE)
-        @StringDef(Brand.AMERICAN_EXPRESS, Brand.DISCOVER, Brand.JCB, Brand.DINERS_CLUB,
-            Brand.VISA, Brand.MASTERCARD, Brand.UNIONPAY, Brand.UNKNOWN)
-        annotation class Brand {
-            companion object {
-                const val AMERICAN_EXPRESS: String = "amex"
-                const val DISCOVER: String = "discover"
-                const val JCB: String = "jcb"
-                const val DINERS_CLUB: String = "diners"
-                const val VISA: String = "visa"
-                const val MASTERCARD: String = "mastercard"
-                const val UNIONPAY: String = "unionpay"
-                const val UNKNOWN: String = "unknown"
-            }
-        }
-
         class Builder : ObjectBuilder<Card> {
-            private var brand: String? = null
+            private var brand: CardBrand = CardBrand.Unknown
             private var checks: Checks? = null
             private var country: String? = null
             private var expiryMonth: Int? = null
@@ -457,7 +442,7 @@ data class PaymentMethod internal constructor(
             private var threeDSecureUsage: ThreeDSecureUsage? = null
             private var wallet: Wallet? = null
 
-            fun setBrand(@Brand brand: String?): Builder = apply {
+            fun setBrand(brand: CardBrand): Builder = apply {
                 this.brand = brand
             }
 
@@ -494,8 +479,17 @@ data class PaymentMethod internal constructor(
             }
 
             override fun build(): Card {
-                return Card(brand, checks, country, expiryMonth, expiryYear, funding,
-                    last4, threeDSecureUsage, wallet)
+                return Card(
+                    brand,
+                    checks,
+                    country,
+                    expiryMonth,
+                    expiryYear,
+                    funding,
+                    last4,
+                    threeDSecureUsage,
+                    wallet
+                )
             }
         }
 
@@ -545,9 +539,9 @@ data class PaymentMethod internal constructor(
 
         @Parcelize
         data class Networks(
-            private val available: Set<String> = emptySet(),
-            private val selectionMandatory: Boolean = false,
-            private val preferred: String? = null
+            val available: Set<String> = emptySet(),
+            val selectionMandatory: Boolean = false,
+            val preferred: String? = null
         ) : StripeModel
     }
 

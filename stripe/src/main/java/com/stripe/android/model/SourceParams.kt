@@ -96,9 +96,7 @@ class SourceParams private constructor(
      *
      * See [usage](https://stripe.com/docs/api/sources/create#create_source-usage)
      */
-    @get:Source.Usage
-    @Source.Usage
-    var usage: String? = null
+    var usage: Source.Usage? = null
         private set
 
     private var weChatParams: WeChatParams? = null
@@ -189,7 +187,7 @@ class SourceParams private constructor(
      *
      * See [usage](https://stripe.com/docs/api/sources/create#create_source-usage)
      */
-    fun setUsage(@Source.Usage usage: String): SourceParams = apply {
+    fun setUsage(usage: Source.Usage): SourceParams = apply {
         this.usage = usage
     }
 
@@ -240,7 +238,7 @@ class SourceParams private constructor(
             )
             .plus(
                 usage?.let {
-                    mapOf(PARAM_USAGE to it)
+                    mapOf(PARAM_USAGE to it.code)
                 }.orEmpty()
             )
             .plus(extraParams)
@@ -440,7 +438,7 @@ class SourceParams private constructor(
             return SourceParams(SourceType.ALIPAY)
                 .setCurrency(currency)
                 .setReturnUrl(returnUrl)
-                .setUsage(Source.Usage.REUSABLE)
+                .setUsage(Source.Usage.Reusable)
                 .setOwner(
                     OwnerParams(
                         email = email,
@@ -564,7 +562,7 @@ class SourceParams private constructor(
                 .setExtraParams(
                     mapOf(
                         PARAM_KLARNA to klarnaParams.toParamMap(),
-                        PARAM_FLOW to Source.SourceFlow.REDIRECT,
+                        PARAM_FLOW to Source.Flow.Redirect.code,
                         PARAM_SOURCE_ORDER to sourceOrderParams.toParamMap()
                     )
                 )
@@ -651,6 +649,7 @@ class SourceParams private constructor(
          *
          * @see [Card Payments with Sources](https://stripe.com/docs/sources/cards)
          */
+        @Deprecated("Use createCardParams with CardParams argument.")
         @JvmStatic
         fun createCardParams(card: Card): SourceParams {
             return SourceParams(SourceType.CARD, card.loggingTokens)
@@ -676,6 +675,34 @@ class SourceParams private constructor(
                     )
                 )
                 .setMetaData(card.metadata)
+        }
+
+        /**
+         * Create Card Source params.
+         *
+         * @param cardParams A [CardParams] object containing the details necessary for the source.
+         * @return a [SourceParams] object that can be used to create a card source.
+         *
+         * @see [Card Payments with Sources](https://stripe.com/docs/sources/cards)
+         */
+        @JvmStatic
+        fun createCardParams(cardParams: CardParams): SourceParams {
+            return SourceParams(SourceType.CARD, cardParams.attribution)
+                .setApiParameterMap(
+                    mapOf(
+                        PARAM_NUMBER to cardParams.number,
+                        PARAM_EXP_MONTH to cardParams.expMonth,
+                        PARAM_EXP_YEAR to cardParams.expYear,
+                        PARAM_CVC to cardParams.cvc
+                    )
+                )
+                .setOwner(
+                    OwnerParams(
+                        address = cardParams.address,
+                        name = cardParams.name
+                    )
+                )
+                .setMetaData(cardParams.metadata)
         }
 
         /**

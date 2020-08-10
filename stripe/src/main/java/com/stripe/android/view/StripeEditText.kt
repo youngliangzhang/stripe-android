@@ -2,8 +2,6 @@ package com.stripe.android.view
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.os.Build
-import android.os.Handler
 import android.text.Editable
 import android.util.AttributeSet
 import android.view.KeyEvent
@@ -16,6 +14,13 @@ import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import com.google.android.material.textfield.TextInputEditText
 import com.stripe.android.R
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Extension of [TextInputEditText] that listens for users pressing the delete key when
@@ -27,8 +32,11 @@ import com.stripe.android.R
 open class StripeEditText @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-    defStyleAttr: Int = androidx.appcompat.R.attr.editTextStyle
+    defStyleAttr: Int = androidx.appcompat.R.attr.editTextStyle,
+    workDispatcher: CoroutineContext = Dispatchers.IO
 ) : TextInputEditText(context, attrs, defStyleAttr) {
+    internal val job = Job()
+    private val workScope: CoroutineScope = CoroutineScope(workDispatcher + job)
 
     protected var isLastKeyDelete: Boolean = false
 
@@ -71,10 +79,10 @@ open class StripeEditText @JvmOverloads constructor(
 
     @ColorInt
     private var defaultErrorColor: Int = 0
+
     @ColorInt
     private var errorColor: Int? = null
 
-    private val hintHandler: Handler = Handler()
     private var errorMessageListener: ErrorMessageListener? = null
 
     /**
@@ -159,9 +167,13 @@ open class StripeEditText @JvmOverloads constructor(
      * @param delayMilliseconds a delay period, measured in milliseconds
      */
     fun setHintDelayed(hint: CharSequence, delayMilliseconds: Long) {
-        hintHandler.postDelayed({
-            setHintSafely(hint)
-        }, delayMilliseconds)
+        workScope.launch {
+            delay(delayMilliseconds)
+
+            withContext(Dispatchers.Main) {
+                setHintSafely(hint)
+            }
+        }
     }
 
     /**
@@ -169,9 +181,10 @@ open class StripeEditText @JvmOverloads constructor(
      * [known issue on Samsung devices](https://issuetracker.google.com/issues/37127697).
      */
     private fun setHintSafely(hint: CharSequence) {
-        try {
+        runCatching {
             setHint(hint)
-        } catch (e: NullPointerException) {
+        }.recover {
+            it
         }
     }
 
@@ -179,15 +192,12 @@ open class StripeEditText @JvmOverloads constructor(
         super.onInitializeAccessibilityNodeInfo(info)
         info.isContentInvalid = shouldShowError
         accessibilityText?.let { info.text = it }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            info.error = errorMessage.takeIf { shouldShowError }
-        }
+        info.error = errorMessage.takeIf { shouldShowError }
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        // Passing a null token removes all callbacks and messages to the handler.
-        hintHandler.removeCallbacksAndMessages(null)
+        job.cancel()
     }
 
     private fun determineDefaultErrorColor() {
