@@ -25,20 +25,31 @@ class PostalCodeEditText @JvmOverloads constructor(
         Config.Global
     ) { _, oldValue, newValue ->
         when (newValue) {
-            Config.Global -> configureForGlobal()
             Config.US -> configureForUs()
+            else -> configureForGlobal()
         }
     }
 
     internal val postalCode: String?
         get() {
-            return if (config == Config.US) {
-                fieldText.takeIf {
-                    ZIP_CODE_PATTERN.matcher(fieldText).matches()
+            return when (config) {
+                Config.US -> {
+                    fieldText.takeIf {
+                        ZIP_CODE_PATTERN.matcher(fieldText).matches()
+                    }
                 }
-            } else {
-                fieldText.takeIf {
-                    it.length in MAX_LENGTH_US..MAX_LENGTH_GLOBAL
+                Config.CANADA -> {
+                    fieldText.takeIf {
+                        it.length in MAX_LENGTH_US..MAX_LENGTH_CANADA
+                    }
+                }
+                Config.AUSTRALIA -> {
+                    fieldText.takeIf {
+                        it.length == MAX_LENGTH_AUSTRALIA
+                    }
+                }
+                else -> {
+                    fieldText
                 }
             }
         }
@@ -78,9 +89,24 @@ class PostalCodeEditText @JvmOverloads constructor(
      */
     private fun configureForGlobal() {
         updateHint(R.string.address_label_postal_code)
-        filters = arrayOf(InputFilter.LengthFilter(MAX_LENGTH_GLOBAL))
-        keyListener = TextKeyListener.getInstance()
-        inputType = InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS
+        when(config) {
+            Config.Global -> {
+                filters = arrayOf(InputFilter.LengthFilter(MAX_LENGTH_GLOBAL))
+                keyListener = TextKeyListener.getInstance()
+                inputType = InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS
+            }
+            Config.CANADA -> {
+                filters = arrayOf(InputFilter.LengthFilter(MAX_LENGTH_CANADA))
+                keyListener = TextKeyListener.getInstance()
+                inputType = InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS
+            }
+            Config.AUSTRALIA -> {
+                filters = arrayOf(InputFilter.LengthFilter(MAX_LENGTH_AUSTRALIA))
+                keyListener = DigitsKeyListener.getInstance(false, true)
+                inputType = InputType.TYPE_CLASS_NUMBER
+            }
+            else -> return
+        }
     }
 
     /**
@@ -113,12 +139,16 @@ class PostalCodeEditText @JvmOverloads constructor(
 
     internal enum class Config {
         Global,
-        US
+        US,
+        CANADA,
+        AUSTRALIA
     }
 
     private companion object {
         private const val MAX_LENGTH_US = 5
-        private const val MAX_LENGTH_GLOBAL = 7
+        private const val MAX_LENGTH_CANADA = 7
+        private const val MAX_LENGTH_AUSTRALIA = 4
+        private const val MAX_LENGTH_GLOBAL = 13
 
         private val ZIP_CODE_PATTERN = Pattern.compile("^[0-9]{5}$")
     }

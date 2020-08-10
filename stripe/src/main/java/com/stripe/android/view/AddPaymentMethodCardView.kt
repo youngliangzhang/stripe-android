@@ -10,6 +10,7 @@ import android.widget.TextView
 import com.stripe.android.databinding.AddPaymentMethodCardViewBinding
 import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.PaymentMethodCreateParams
+import java.util.Locale
 
 /**
  * View for adding a payment method of type [PaymentMethod.Type.Card].
@@ -21,7 +22,7 @@ internal class AddPaymentMethodCardView @JvmOverloads internal constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
     private val billingAddressFields: BillingAddressFields = BillingAddressFields.PostalCode,
-    shouldUseUSPostalCode: Boolean = true
+    locale: Locale = Locale.US
 ) : AddPaymentMethodView(context, attrs, defStyleAttr) {
     private val cardMultilineWidget: CardMultilineWidget
     private val billingAddressWidget: ShippingInfoWidget
@@ -71,7 +72,7 @@ internal class AddPaymentMethodCardView @JvmOverloads internal constructor(
         cardMultilineWidget.setShouldShowPostalCode(
             billingAddressFields == BillingAddressFields.PostalCode
         )
-        cardMultilineWidget.setShouldUseUSPostalCode(shouldUseUSPostalCode)
+        cardMultilineWidget.setLocale(locale)
 
         billingAddressWidget = viewBinding.billingAddressWidget
         if (billingAddressFields == BillingAddressFields.Full) {
