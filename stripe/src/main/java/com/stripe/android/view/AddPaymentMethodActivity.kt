@@ -134,7 +134,7 @@ class AddPaymentMethodActivity : StripeActivity() {
                 AddPaymentMethodCardView(
                     context = this,
                     billingAddressFields = args.billingAddressFields,
-                    shouldUseUSPostalCode = args.shouldUseUSPostalCode
+                    locale = args.locale
                 )
             }
             PaymentMethod.Type.Fpx -> {

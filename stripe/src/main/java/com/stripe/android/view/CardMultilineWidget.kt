@@ -31,6 +31,7 @@ import com.stripe.android.model.PaymentMethod
 import com.stripe.android.model.PaymentMethodCreateParams
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.util.Locale
 import kotlin.properties.Delegates
 
 /**
@@ -89,6 +90,8 @@ class CardMultilineWidget @JvmOverloads constructor(
 
     private var cardHintText: String = resources.getString(R.string.card_number_hint)
 
+    private var locale: Locale = Locale.US
+
     /**
      * If [shouldShowPostalCode] is true and [postalCodeRequired] is true, then postal code is a
      * required field.
@@ -112,7 +115,13 @@ class CardMultilineWidget @JvmOverloads constructor(
         if (zipCodeRequired) {
             postalCodeEditText.config = PostalCodeEditText.Config.US
         } else {
-            postalCodeEditText.config = PostalCodeEditText.Config.Global
+            postalCodeEditText.config =
+                when (locale) {
+                    Locale.US -> PostalCodeEditText.Config.US
+                    Locale.CANADA -> PostalCodeEditText.Config.CANADA
+                    Locale("en", "AU") -> PostalCodeEditText.Config.AUSTRALIA
+                    else -> PostalCodeEditText.Config.Global
+                }
         }
     }
 
@@ -333,23 +342,6 @@ class CardMultilineWidget @JvmOverloads constructor(
 
         adjustViewForPostalCodeAttribute(shouldShowPostalCode)
 
-//        postalCodeEditText.setAfterTextChangedListener(
-//            object : StripeEditText.AfterTextChangedListener {
-//                override fun onTextChanged(text: String) {
-//                    if (shouldUseUSPostalCode) {
-//                        if (isPostalCodeMaximalLength(text)) {
-//                            cardInputListener?.onPostalCodeComplete()
-//                        }
-//                    } else {
-//                        if (text.length >= 5) {
-//                            cardInputListener?.onPostalCodeComplete()
-//                        }
-//                    }
-//
-//                    postalCodeEditText.shouldShowError = false
-//                }
-//            })
-
         cardNumberEditText.updateLengthFilter()
 
         cardBrand = CardBrand.Unknown
@@ -425,19 +417,6 @@ class CardMultilineWidget @JvmOverloads constructor(
         cardNumberEditText.shouldShowError = !cardNumberIsValid
         expiryDateEditText.shouldShowError = !expiryIsValid
         cvcEditText.shouldShowError = !cvcIsValid
-//        val postalCodeIsValidOrGone: Boolean
-//        if (shouldShowPostalCode) {
-//            val postalCodeString = postalCodeEditText.text?.toString()
-//            postalCodeIsValidOrGone =
-//                    if (shouldUseUSPostalCode) {
-//                        isPostalCodeMaximalLength(postalCodeString)
-//                    } else {
-//                        postalCodeString != null && postalCodeString.length >= 5
-//                    }
-//            postalCodeEditText.shouldShowError = !postalCodeIsValidOrGone
-//        } else {
-//            postalCodeIsValidOrGone = true
-//        }
 
         postalCodeEditText.shouldShowError =
             (postalCodeRequired || usZipCodeRequired) &&
@@ -473,8 +452,9 @@ class CardMultilineWidget @JvmOverloads constructor(
         adjustViewForPostalCodeAttribute(shouldShowPostalCode)
     }
 
-    fun setShouldUseUSPostalCode(shouldUseUSPostalCode: Boolean) {
-        this.usZipCodeRequired = shouldUseUSPostalCode
+    fun setLocale(locale: Locale) {
+        this.locale = locale
+        this.usZipCodeRequired = locale == Locale.US
     }
 
     /**
@@ -684,7 +664,6 @@ class CardMultilineWidget @JvmOverloads constructor(
                 if (usZipCodeRequired)
                     postalCodeEditText.setHintDelayed(R.string.zip_helper, COMMON_HINT_DELAY)
                 cardInputListener?.onFocusChange(CardInputListener.FocusField.PostalCode)
-                postalCodeEditText.setHintDelayed(R.string.zip_helper, COMMON_HINT_DELAY)
             } else {
                 postalCodeEditText.hint = ""
             }

@@ -12,6 +12,7 @@ import com.stripe.android.view.AddPaymentMethodActivityStarter.Args
 import com.stripe.android.view.AddPaymentMethodActivityStarter.Companion.REQUEST_CODE
 import com.stripe.android.view.AddPaymentMethodActivityStarter.Result.Companion.fromIntent
 import kotlinx.android.parcel.Parcelize
+import java.util.Locale
 
 /**
  * A class to start [AddPaymentMethodActivity]. Arguments for the activity can be
@@ -39,7 +40,7 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
     data class Args internal constructor(
         internal val billingAddressFields: BillingAddressFields,
         internal val shouldAttachToCustomer: Boolean,
-        internal val shouldUseUSPostalCode: Boolean,
+        internal val locale: Locale,
         internal val isPaymentSessionActive: Boolean,
         internal val paymentMethodType: PaymentMethod.Type,
         internal val paymentConfiguration: PaymentConfiguration?,
@@ -50,7 +51,7 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
         class Builder : ObjectBuilder<Args> {
             private var billingAddressFields: BillingAddressFields = BillingAddressFields.PostalCode
             private var shouldAttachToCustomer: Boolean = false
-            private var shouldUseUSPostalCode: Boolean = true
+            private var locale: Locale = Locale.US
             private var isPaymentSessionActive = false
             private var paymentMethodType: PaymentMethod.Type? = PaymentMethod.Type.Card
             private var paymentConfiguration: PaymentConfiguration? = null
@@ -76,8 +77,8 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
                 this.billingAddressFields = billingAddressFields
             }
 
-            fun setShouldUseUSPostalCode(shouldUseUSPostalCode: Boolean): Builder {
-                this.shouldUseUSPostalCode = shouldUseUSPostalCode
+            fun setLocale(locale: Locale): Builder {
+                this.locale = locale
                 return this
             }
 
@@ -128,7 +129,7 @@ class AddPaymentMethodActivityStarter : ActivityStarter<AddPaymentMethodActivity
                 return Args(
                     billingAddressFields = billingAddressFields,
                     shouldAttachToCustomer = shouldAttachToCustomer,
-                    shouldUseUSPostalCode = shouldUseUSPostalCode,
+                    locale = locale,
                     isPaymentSessionActive = isPaymentSessionActive,
                     paymentMethodType = paymentMethodType ?: PaymentMethod.Type.Card,
                     paymentConfiguration = paymentConfiguration,
